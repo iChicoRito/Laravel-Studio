@@ -56,6 +56,7 @@ class SubscriptionPlanModel extends Model
         'features' => 'array',
         'price' => 'decimal:2',
         'commission_rate' => 'decimal:2',
+        'max_studios' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -10,8 +10,15 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        //
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'client' => \App\Http\Middleware\ClientMiddleware::class,
+            'owner' => \App\Http\Middleware\OwnerMiddleware::class,
+            'freelancer' => \App\Http\Middleware\FreelancerMiddleware::class,
+            'studio.photographer' => \App\Http\Middleware\StudioPhotographerMiddleware::class,
+            'check.studio.limit' => \App\Http\Middleware\CheckStudioRegistrationLimit::class, // ADDED
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

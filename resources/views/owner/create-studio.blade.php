@@ -7,6 +7,158 @@
         <div class="container-fluid">                  
             <div class="row mt-3">
                 <div class="col-12">
+                    @php
+                        $user = Auth::user();
+                        $studioCount = \App\Models\StudioOwner\StudiosModel::where('user_id', $user->id)->count();
+                        
+                        // Get all studio IDs owned by this user
+                        $userStudioIds = \App\Models\StudioOwner\StudiosModel::where('user_id', $user->id)->pluck('id')->toArray();
+                        
+                        // Check if ANY of the user's studios have an active subscription
+                        $activeSubscription = null;
+                        $subscriptionPlan = null;
+                        $maxStudios = null;
+                        
+                        if (!empty($userStudioIds)) {
+                            // Get the most recent active subscription from any of the user's studios
+                            $activeSubscription = \App\Models\StudioPlanModel::whereIn('studio_id', $userStudioIds)
+                                ->with('plan')
+                                ->where('status', 'active')
+                                ->where('payment_status', 'paid')
+                                ->where('end_date', '>=', now()->toDateString())
+                                ->latest()
+                                ->first();
+                                
+                            if ($activeSubscription && $activeSubscription->plan) {
+                                $subscriptionPlan = $activeSubscription->plan;
+                                $maxStudios = $subscriptionPlan->max_studios;
+                            }
+                        }
+                        
+                        \Log::info('Studio Registration Check', [
+                            'user_id' => $user->id,
+                            'studio_count' => $studioCount,
+                            'user_studio_ids' => $userStudioIds,
+                            'has_subscription' => $activeSubscription ? true : false,
+                            'max_studios' => $maxStudios
+                        ]);
+                    @endphp
+
+                    @if($studioCount >= 1)
+                        @if(!$activeSubscription)
+                            {{-- ==================== No subscription - Block registration ==================== --}}
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0">
+                                        <i class="ti ti-alert-triangle fs-24 text-danger"></i>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <h5 class="alert-heading text-danger">Subscription Required!</h5>
+                                        <p class="mb-2">You already have <strong>{{ $studioCount }} registered studio(s)</strong>. To register another studio, you need an active subscription plan. Without a subscription, you cannot register additional studios.</p>
+                                        <div>
+                                            <a href="{{ route('owner.subscription.index') }}" class="btn btn-danger">
+                                                <i class="ti ti-crown me-1"></i>View Subscription Plans
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {{-- Disable the form if no subscription --}}
+                            <style>
+                                #studioRegistrationForm input:not([readonly]):not([disabled]),
+                                #studioRegistrationForm select:not([disabled]),
+                                #studioRegistrationForm textarea:not([disabled]),
+                                #studioRegistrationForm button[type="submit"] {
+                                    pointer-events: none;
+                                    opacity: 0.6;
+                                    background-color: #f8f9fa;
+                                }
+                                #studioRegistrationForm button[type="submit"] {
+                                    display: none;
+                                }
+                            </style>
+                            
+                        @elseif($activeSubscription)
+                            @php
+                                $canRegister = $maxStudios === null || $studioCount < $maxStudios;
+                                $remainingStudios = $maxStudios !== null ? max(0, $maxStudios - $studioCount) : 'unlimited';
+                                
+                                \Log::info('Subscription Details', [
+                                    'plan_name' => $subscriptionPlan->name ?? 'Unknown',
+                                    'max_studios' => $maxStudios,
+                                    'can_register' => $canRegister,
+                                    'remaining' => $remainingStudios
+                                ]);
+                            @endphp
+                            
+                            @if(!$canRegister)
+                                {{-- ==================== At plan limit ==================== --}}
+                                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                                    <div class="d-flex">
+                                        <div class="flex-shrink-0">
+                                            <i class="ti ti-alert-circle fs-24 text-warning"></i>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <h5 class="alert-heading text-warning">Studio Limit Reached!</h5>
+                                            <p class="mb-2">
+                                                Your <strong>{{ ucfirst($subscriptionPlan->name) }}</strong> plan allows up to 
+                                                <strong>{{ $maxStudios }} studio(s)</strong>. You have already registered 
+                                                <strong>{{ $studioCount }} studio(s)</strong>.
+                                            </p>
+                                            <p class="mb-0">
+                                                To register more studios, please upgrade your subscription plan.
+                                            </p>
+                                            <div class="mt-3">
+                                                <a href="{{ route('owner.subscription.index') }}" class="btn btn-warning">
+                                                    <i class="ti ti-crown me-1"></i>Upgrade Plan
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {{-- Disable the form --}}
+                                <style>
+                                    #studioRegistrationForm input:not([readonly]):not([disabled]),
+                                    #studioRegistrationForm select:not([disabled]),
+                                    #studioRegistrationForm textarea:not([disabled]),
+                                    #studioRegistrationForm button[type="submit"] {
+                                        pointer-events: none;
+                                        opacity: 0.6;
+                                        background-color: #f8f9fa;
+                                    }
+                                    #studioRegistrationForm button[type="submit"] {
+                                        display: none;
+                                    }
+                                </style>
+                                
+                            @else
+                                {{-- ==================== Can register - Show info ==================== --}}
+                                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                    <div class="d-flex">
+                                        <div class="flex-shrink-0">
+                                            <i class="ti ti-circle-check fs-24 text-success"></i>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <h5 class="alert-heading text-success">Subscription Active</h5>
+                                            <p class="mb-2">
+                                                You have an active <strong>{{ ucfirst($subscriptionPlan->name) }}</strong> subscription.
+                                            </p>
+                                            <p class="mb-0">
+                                                @if($maxStudios !== null)
+                                                    You can register up to <strong>{{ $maxStudios }} studio(s)</strong>. 
+                                                    Remaining slots: <strong>{{ $remainingStudios }}</strong>
+                                                @else
+                                                    You can register unlimited studios with your current plan.
+                                                @endif
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endif
+                    @endif
                     <div class="card">
                         <div class="card-header card-title">
                             <h4 class="card-title">Register your Studio</h4>
@@ -110,6 +262,16 @@
 
                                 <div class="row">
                                     <h4 class="card-title text-primary mb-3">Owner Information</h4>
+                                    <div class="col-12 mb-3">
+                                        <label class="form-label fw-semibold">Owner Profile Picture</label>
+                                        <div class="input-group">
+                                            <input type="file" class="form-control" id="ownerProfilePhoto" name="owner_profile_photo" accept=".jpg,.jpeg,.png">
+                                        </div>
+                                        <div class="form-text">Upload a profile picture for the owner (optional). Max size: 3MB</div>
+                                        <div class="invalid-feedback">
+                                            Please upload a valid image file.
+                                        </div>
+                                    </div>
                                     <div class="col-md-12 mb-3">
                                         <label class="form-label">Owner Name</label>
                                         <input type="text" class="form-control" placeholder="Enter your owner name" name="owner_name" 
@@ -211,15 +373,27 @@
                                         </div>
                                     </div>
 
-                                    <div class="col-12 mb-3">
-                                        <label class="form-label">Starting Price</label>
+                                    <div class="col-12 col-md-6 mb-3">
+                                        <label class="form-label">Starting Price (PHP)</label>
                                         <div class="input-group">
-                                            <span class="input-group-text" id="starting-price-addon">PHP</span>
-                                            <input type="number" class="form-control" placeholder="Enter your starting price" name="starting_price" required>
+                                            <span class="input-group-text">₱</span>
+                                            <input type="number" class="form-control" placeholder="Enter your starting price" name="starting_price" step="0.01" min="0" required>
                                             <div class="invalid-feedback">
                                                 Please enter your starting price.
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div class="col-12 col-md-6 mb-3">
+                                        <label class="form-label">Downpayment Percentage (%)</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" placeholder="Enter downpayment percentage" name="downpayment_percentage" step="0.01" min="0" max="100" value="30">
+                                            <span class="input-group-text">%</span>
+                                            <div class="invalid-feedback">
+                                                Please enter a valid percentage between 0 and 100.
+                                            </div>
+                                        </div>
+                                        <small class="form-text text-muted">Default is 30%. This will be required as downpayment for bookings.</small>
                                     </div>
                                 </div>
 
@@ -689,6 +863,34 @@
                 $('#operatingDaysGroup').removeClass('border border-danger rounded');
                 $('.operating-days-error').hide();
             });
+
+            // Check if form should be disabled
+            @if(($studioCount >= 1 && !$activeSubscription) || (isset($canRegister) && !$canRegister))
+                // Disable form submission
+                $('#studioRegistrationForm').on('submit', function(e) {
+                    e.preventDefault();
+                    
+                    Swal.fire({
+                        title: 'Subscription Required!',
+                        html: 'You need an active subscription plan to register additional studios.',
+                        icon: 'warning',
+                        confirmButtonColor: '#3475db',
+                        confirmButtonText: 'View Plans',
+                        showCancelButton: true,
+                        cancelButtonText: 'Cancel'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = '{{ route("owner.subscription.index") }}';
+                        }
+                    });
+                });
+                
+                // Disable all interactive elements
+                $('#studioRegistrationForm input:not([readonly]):not([disabled]), ' +
+                '#studioRegistrationForm select:not([disabled]), ' +
+                '#studioRegistrationForm textarea:not([disabled]), ' +
+                '#studioRegistrationForm button[type="submit"]').prop('disabled', true);
+            @endif
             
             // Bootstrap validation
             (function() {

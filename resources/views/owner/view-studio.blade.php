@@ -536,7 +536,7 @@
                                         
                                         {{-- Starting Price --}}
                                         @if($studio->starting_price)
-                                        <div class="col-12 mb-3">
+                                        <div class="col-12 col-md-6 mb-3">
                                             <div class="d-flex align-items-start">
                                                 <div class="flex-shrink-0">
                                                     <div class="bg-light-primary rounded-circle p-2">
@@ -546,6 +546,23 @@
                                                 <div class="flex-grow-1 ms-3">
                                                     <label class="text-muted small mb-1">Starting Price</label>
                                                     <p class="mb-0 fw-medium">PHP {{ number_format($studio->starting_price, 2) }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @endif
+
+                                        @if($studio->downpayment_percentage)
+                                        <div class="col-12 col-md-6 mb-3">
+                                            <div class="d-flex align-items-start">
+                                                <div class="flex-shrink-0">
+                                                    <div class="bg-light-primary rounded-circle p-2">
+                                                        <i data-lucide="percent" class="fs-20 text-primary"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="flex-grow-1 ms-3">
+                                                    <label class="text-muted small mb-1">Downpayment Requirement</label>
+                                                    <p class="mb-0 fw-medium">{{ number_format($studio->downpayment_percentage, 2) }}% of total booking amount</p>
+                                                    <small class="text-muted">Clients must pay this percentage as downpayment when booking</small>
                                                 </div>
                                             </div>
                                         </div>

@@ -29,6 +29,7 @@ class StudiosModel extends Model
         'studio_description',
         'studio_logo',
         'starting_price',
+        'downpayment_percentage',
         'operating_days',
         'start_time',
         'end_time',
@@ -45,6 +46,7 @@ class StudiosModel extends Model
         'operating_days' => 'array',
         'start_time' => 'datetime:H:i',
         'end_time' => 'datetime:H:i',
+        'downpayment_percentage' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         // Removed: 'service_coverage_area' => 'array',
@@ -124,6 +126,7 @@ class StudiosModel extends Model
             'service_categories' => 'required|array|min:1', // Changed: Multiple categories allowed
             'service_categories.*' => 'exists:tbl_categories,id',
             'starting_price' => 'required|numeric|min:0',
+            'downpayment_percentage' => 'nullable|numeric|min:0|max:100',
             'operating_days' => 'required|array|min:1',
             'operating_days.*' => 'string|in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
             'start_time' => 'required|date_format:H:i',
