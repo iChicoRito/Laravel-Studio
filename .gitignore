@@ -1,0 +1,57 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+/auth.json
+
+# Dependencies
+/vendor
+/node_modules
+
+# Laravel build & runtime
+/public/hot
+/public/build
+/bootstrap/cache/*.php
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*.php
+/storage/logs/*
+/storage/*.key
+
+# Keep these (public disk, often symlinked)
+!/storage/app/public
+!/storage
+
+# Testing
+.phpunit.result.cache
+/.phpunit.cache/
+coverage/
+
+# Lockfiles (commit composer.lock, ignore others or adjust)
+# composer.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Editors & IDEs
+/.vscode
+/.idea
+/.fleet
+/.nova
+/.zed
+
+# Homestead (older local env)
+Homestead.json
+Homestead.yaml
+
+# Extra common ignores
+*.bak
+*~
+telescope-*.sqlite*
+horizon.*
+reverb.*
+pulse-*

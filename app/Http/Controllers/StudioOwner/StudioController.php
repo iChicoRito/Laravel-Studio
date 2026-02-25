@@ -1,0 +1,344 @@
+<?php
+
+namespace App\Http\Controllers\StudioOwner;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\StudioOwner\StudiosModel;
+use App\Models\StudioOwner\StudioScheduleModel;
+use App\Models\StudioOwner\StudioCategoryModel;
+use App\Models\Admin\LocationModel;
+use App\Models\Admin\CategoriesModel;
+use App\Models\StudioOwner\UserModel;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class StudioController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+        $studios = StudiosModel::with(['user', 'location', 'category', 'categories', 'schedules'])
+            ->where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return view('owner.view-studio', compact('studios'));
+    }
+
+    public function create()
+    {
+        $categories = CategoriesModel::where('status', 'active')->get();
+        $user = Auth::user();
+        $municipalities = LocationModel::select('municipality')->distinct()->pluck('municipality');
+        
+        return view('owner.create-studio', compact('categories', 'user', 'municipalities'));
+    }
+
+    /**
+     * Get barangays for a specific municipality
+     */
+    public function getBarangays($municipality)
+    {
+        $location = LocationModel::where('municipality', $municipality)->first();
+        
+        if (!$location) {
+            return response()->json(['barangays' => [], 'zip_code' => null]);
+        }
+        
+        // Get barangays array from the location
+        $barangays = $location->barangay;
+        
+        // Handle JSON string or array
+        if (is_string($barangays)) {
+            $barangaysArray = json_decode($barangays, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If not valid JSON, treat as a single item array
+                $barangaysArray = [$barangays];
+            }
+        } else {
+            $barangaysArray = $barangays;
+        }
+        
+        // Ensure it's an array
+        $barangaysArray = is_array($barangaysArray) ? $barangaysArray : [];
+        
+        return response()->json([
+            'barangays' => $barangaysArray,
+            'zip_code' => $location->zip_code
+        ]);
+    }
+
+    /**
+     * Store a new studio
+     */
+    public function store(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Debug: Log incoming request data
+            \Log::info('Studio Registration Request Data:', $request->all());
+            
+            // Use the rules() method instead of $rules property
+            $validatedData = $request->validate(StudiosModel::rules());
+            
+            // Debug: Log validated data
+            \Log::info('Validated Data:', $validatedData);
+            
+            $user = Auth::user();
+            
+            // Handle file uploads
+            $studioLogoPath = $this->uploadFile($request->file('studio_logo'), 'studio_logo');
+            $businessPermitPath = $this->uploadFile($request->file('business_permit'), 'studio_documents');
+            $ownerIdPath = $this->uploadFile($request->file('owner_id_document'), 'studio_documents');
+            
+            // Find location based on municipality and barangay
+            $municipality = $validatedData['municipality'];
+            $barangay = $validatedData['barangay'];
+            
+            // Debug: Log location search parameters
+            \Log::info('Location Search:', [
+                'municipality' => $municipality,
+                'barangay' => $barangay
+            ]);
+            
+            // First, find the location by municipality
+            $location = LocationModel::where('municipality', $municipality)->first();
+            
+            if (!$location) {
+                // Debug: Municipality not found
+                \Log::warning('Municipality not found: ' . $municipality);
+                
+                DB::rollBack();
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected municipality does not exist in our system.',
+                    'errors' => [
+                        'municipality' => ['The selected municipality is not available in our system.']
+                    ],
+                    'alert_color' => '#DC3545'
+                ], 422);
+            }
+            
+            // Check if barangay exists in the location's barangay array
+            $barangays = $location->barangay;
+            
+            // Handle both JSON string and array formats
+            if (is_string($barangays)) {
+                $barangaysArray = json_decode($barangays, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    // If not valid JSON, try to decode as a simple array
+                    $barangaysArray = [$barangays];
+                }
+            } else {
+                $barangaysArray = $barangays;
+            }
+            
+            // Check if barangay exists in the array
+            $barangayExists = false;
+            if (is_array($barangaysArray)) {
+                $barangayExists = in_array($barangay, $barangaysArray);
+                
+                // Debug: Barangay check
+                \Log::info('Barangay Check:', [
+                    'barangay_to_find' => $barangay,
+                    'available_barangays' => $barangaysArray,
+                    'exists' => $barangayExists
+                ]);
+            }
+            
+            if (!$barangayExists) {
+                // Debug: Barangay not found
+                \Log::warning('Barangay not found in location: ' . $barangay . ' for municipality: ' . $municipality);
+                
+                DB::rollBack();
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected barangay does not exist in our system for this municipality.',
+                    'errors' => [
+                        'barangay' => ['The selected barangay is not available for this municipality.']
+                    ],
+                    'alert_color' => '#DC3545'
+                ], 422);
+            }
+            
+            // Create studio
+            $studioData = [
+                'user_id' => $user->id,
+                'category_id' => $validatedData['service_categories'][0] ?? null,
+                'location_id' => $location->id,
+                'street' => $validatedData['street'],
+                'barangay' => $validatedData['barangay'],
+                'contact_number' => $validatedData['contact_number'],
+                'studio_email' => $validatedData['studio_email'],
+                'facebook_url' => $validatedData['facebook_url'] ?? null,
+                'instagram_url' => $validatedData['instagram_url'] ?? null,
+                'website_url' => $validatedData['website_url'] ?? null,
+                'studio_name' => $validatedData['studio_name'],
+                'studio_type' => $validatedData['studio_type'],
+                'year_established' => $validatedData['year_established'],
+                'studio_description' => $validatedData['studio_description'],
+                'studio_logo' => $studioLogoPath,
+                'starting_price' => $validatedData['starting_price'],
+                'operating_days' => json_encode($validatedData['operating_days']),
+                'start_time' => $validatedData['start_time'],
+                'end_time' => $validatedData['end_time'],
+                'max_clients_per_day' => $validatedData['max_clients_per_day'],
+                'advance_booking_days' => $validatedData['advance_booking_days'],
+                'business_permit' => $businessPermitPath,
+                'owner_id_document' => $ownerIdPath,
+                'status' => 'pending',
+            ];
+            
+            // Debug: Studio data to be created
+            \Log::info('Studio Data to Create:', $studioData);
+            
+            $studio = StudiosModel::create($studioData);
+            
+            // Create studio schedule
+            $this->createStudioSchedule($studio, $location, $validatedData);
+            
+            // Create studio category pivots (multiple categories)
+            $this->createStudioCategories($studio, $user, $validatedData['service_categories']);
+            
+            DB::commit();
+            
+            // Debug: Success
+            \Log::info('Studio Registration Successful:', ['studio_id' => $studio->id]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Studio registration submitted successfully! It will be reviewed by admin.',
+                'alert_color' => '#007BFF', // Blue for success
+                'redirect' => route('owner.studio.index')
+            ]);
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            
+            // Debug: Validation error
+            \Log::error('Studio Registration Validation Error:', $e->errors());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+                'alert_color' => '#DC3545' // Red for error
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            
+            // Debug: General error
+            \Log::error('Studio Registration Error:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to register studio: ' . $e->getMessage(),
+                'alert_color' => '#DC3545' // Red for error
+            ], 500);
+        }
+    }
+
+    /**
+     * Create studio schedule record.
+     */
+    private function createStudioSchedule($studio, $location, $validatedData)
+    {
+        return StudioScheduleModel::create([
+            'studio_id' => $studio->id,
+            'location_id' => $location->id,
+            'operating_days' => json_encode($validatedData['operating_days']),
+            'opening_time' => $validatedData['start_time'],
+            'closing_time' => $validatedData['end_time'],
+            'booking_limit' => $validatedData['max_clients_per_day'],
+            'advance_booking' => $validatedData['advance_booking_days'],
+        ]);
+    }
+
+    /**
+     * Create studio category pivot records.
+     */
+    private function createStudioCategories($studio, $user, $categoryIds)
+    {
+        $studioCategories = [];
+        
+        foreach ($categoryIds as $categoryId) {
+            $studioCategories[] = [
+                'user_id' => $user->id,
+                'studio_id' => $studio->id,
+                'category_id' => $categoryId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+        
+        // Use insert for bulk insertion
+        StudioCategoryModel::insert($studioCategories);
+    }
+
+    public function destroy($id)
+    {
+        try {
+            $user = Auth::user();
+            $studio = StudiosModel::where('id', $id)->where('user_id', $user->id)->firstOrFail();
+            
+            // Delete files
+            $this->deleteFile($studio->studio_logo);
+            $this->deleteFile($studio->business_permit);
+            $this->deleteFile($studio->owner_id_document);
+            
+            // Delete studio
+            $studio->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Studio registration cancelled successfully.',
+                'alert_color' => '#007BFF' // Blue for success
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cancel studio: ' . $e->getMessage(),
+                'alert_color' => '#DC3545' // Red for error
+            ], 500);
+        }
+    }
+
+    private function uploadFile($file, $folder)
+    {
+        if (!$file) {
+            return null;
+        }
+        
+        $fileName = Str::uuid() . '.' . $file->getClientOriginalExtension();
+        
+        // Create directory if it doesn't exist
+        $directory = "{$folder}"; // e.g., "studio_logo" or "studio_documents"
+        
+        // Ensure the directory exists
+        if (!Storage::disk('public')->exists($directory)) {
+            Storage::disk('public')->makeDirectory($directory, 0755, true);
+        }
+        
+        // Store the file
+        $path = $file->storeAs($directory, $fileName, 'public');
+        
+        return $path; // This will return: "studio_logo/filename.jpg" or "studio_documents/filename.pdf"
+    }
+
+    private function deleteFile($filePath)
+    {
+        if ($filePath && Storage::disk('public')->exists($filePath)) {
+            Storage::disk('public')->delete($filePath);
+        }
+    }
+}

@@ -1,0 +1,44 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('tbl_studio_ratings', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('booking_id');
+            $table->unsignedBigInteger('client_id');
+            $table->unsignedBigInteger('studio_id');
+            $table->unsignedTinyInteger('rating')->comment('1-5 stars');
+            $table->string('title')->nullable();
+            $table->text('review_text');
+            $table->enum('review_type', ['positive', 'neutral', 'negative'])->nullable();
+            $table->string('preset_used')->nullable()->comment('The preset review template used');
+            $table->boolean('is_recommend')->default(true);
+            $table->timestamps();
+            
+            // Foreign keys
+            $table->foreign('booking_id')->references('id')->on('tbl_bookings')->onDelete('cascade');
+            $table->foreign('client_id')->references('id')->on('tbl_users')->onDelete('cascade');
+            $table->foreign('studio_id')->references('id')->on('tbl_studios')->onDelete('cascade');
+            
+            // Ensure one review per booking
+            $table->unique('booking_id', 'unique_booking_review');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('tbl_studio_ratings');
+    }
+};
