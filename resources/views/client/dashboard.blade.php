@@ -7,7 +7,7 @@
         <div class="container-fluid">
             <div class="page-title-head d-flex align-items-center">
                 <div class="flex-grow-1">
-                    <h3 class="fw-bold m-0">Welcome to SnapStudio</h3>
+                    <h3 class="fw-bold m-0">Welcome to Lumora</h3>
                     <p>Providing Reliable and Continuous Photography Services for Clients</p>
                 </div>
             </div>

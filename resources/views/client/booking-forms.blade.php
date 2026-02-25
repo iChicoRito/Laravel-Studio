@@ -94,6 +94,9 @@
                                 <input type="hidden" id="bookingType" value="{{ $type }}">
                                 <input type="hidden" id="providerId" value="{{ $id }}">
                                 <input type="hidden" id="operatingDays" value="{{ json_encode($operatingDays) }}">
+                                @if($type === 'studio')
+                                <input type="hidden" id="downpaymentPercentage" value="{{ $downpaymentPercentage }}">
+                                @endif
 
                                 {{-- CLIENT INFORMATION --}}
                                 <h4 class="card-title text-primary mb-3">Client Information</h4>
@@ -218,10 +221,18 @@
                                 <h4 class="card-title text-primary mb-3">Payment Type</h4>
                                 <div class="mb-4">
                                     <div class="btn-group w-100" role="group" aria-label="Payment type selection">
-                                        <input class="btn-check" type="radio" name="payment_type" id="payment_type_downpayment" value="downpayment" checked>
-                                        <label class="btn btn-outline-primary" for="payment_type_downpayment">
-                                            <i class="ti ti-percentage me-1"></i> 30% Downpayment
-                                        </label>
+                                        @if($type === 'studio')
+                                            <input class="btn-check" type="radio" name="payment_type" id="payment_type_downpayment" value="downpayment" checked>
+                                            <label class="btn btn-outline-primary" for="payment_type_downpayment">
+                                                <i class="ti ti-percentage me-1"></i> {{ $downpaymentPercentage }}% Downpayment
+                                            </label>
+                                        @else
+                                            {{-- For freelancer, default to 30% if no column exists --}}
+                                            <input class="btn-check" type="radio" name="payment_type" id="payment_type_downpayment" value="downpayment" checked>
+                                            <label class="btn btn-outline-primary" for="payment_type_downpayment">
+                                                <i class="ti ti-percentage me-1"></i> 30% Downpayment
+                                            </label>
+                                        @endif
                                         
                                         <input class="btn-check" type="radio" name="payment_type" id="payment_type_full" value="full_payment">
                                         <label class="btn btn-outline-primary" for="payment_type_full">
@@ -384,11 +395,11 @@
                             <span class="fw-medium" id="packagePrice">₱0</span>
                         </div>
 
-                        <div class="d-flex justify-content-between mb-2">
-                            <span>Down Payment (30%):</span>
+                        <div class="d-flex justify-content-between mb-2" id="downPaymentRow">
+                            <span id="downPaymentLabel">Down Payment (30%):</span>
                             <span class="fw-medium" id="downPayment">₱0</span>
                         </div>
-                        <div class="d-flex justify-content-between mb-2">
+                        <div class="d-flex justify-content-between mb-2" id="remainingBalanceRow">
                             <span>Remaining Balance:</span>
                             <span class="fw-medium" id="remainingBalance">₱0</span>
                         </div>
@@ -971,6 +982,17 @@
                             if ($('#bookingSummaryModal').hasClass('show')) {
                                 updateSummaryPriceDisplay(response.summary);
                             }
+                            
+                            // Update the downpayment label text if needed
+                            const isStudio = $('#bookingType').val() === 'studio';
+                            if (isStudio && response.summary.downpayment_percentage) {
+                                const downpaymentLabel = $('label[for="payment_type_downpayment"]');
+                                if (downpaymentLabel.length) {
+                                    downpaymentLabel.html(`
+                                        <i class="ti ti-percentage me-1"></i> ${response.summary.downpayment_percentage}% Downpayment
+                                    `);
+                                }
+                            }
                         }
                     },
                     error: function(xhr) {
@@ -1120,6 +1142,20 @@
                     $('#downPayment').text('₱' + window.bookingSummary.down_payment);
                     $('#remainingBalance').text('₱' + window.bookingSummary.remaining_balance);
                     $('#totalAmount').text('₱' + window.bookingSummary.total_amount);
+                    
+                    // ========== ADD THIS: Update down payment label with dynamic percentage ==========
+                    const downpaymentPercentage = window.bookingSummary.downpayment_percentage || 30;
+                    $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                    
+                    // Show/hide rows based on payment type
+                    if (window.bookingSummary.payment_type === 'full_payment') {
+                        $('#downPaymentRow').hide();
+                        $('#remainingBalanceRow').hide();
+                    } else {
+                        $('#downPaymentRow').show();
+                        $('#remainingBalanceRow').show();
+                    }
+                    // ========== END OF ADDED CODE ==========
                     
                     const galleryHtml = `
                         <p class="text-muted small mb-1 mt-2">Online Gallery:</p>
@@ -1377,7 +1413,23 @@
                 $('#remainingBalance').text('₱' + summary.remaining_balance);
                 $('#totalAmount').text('₱' + summary.total_amount);
                 
-                const paymentTypeText = summary.payment_type === 'downpayment' ? '30% Downpayment' : 'Full Payment';
+                // Update down payment label with dynamic percentage
+                const downpaymentPercentage = summary.downpayment_percentage || 30;
+                $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                
+                // Show/hide rows based on payment type
+                if (summary.payment_type === 'full_payment') {
+                    $('#downPaymentRow').hide();
+                    $('#remainingBalanceRow').hide();
+                } else {
+                    $('#downPaymentRow').show();
+                    $('#remainingBalanceRow').show();
+                }
+                
+                const paymentTypeText = summary.payment_type === 'downpayment' 
+                    ? `${downpaymentPercentage}% Downpayment`
+                    : 'Full Payment';
+                
                 $('#summaryPaymentType').remove();
                 $('#summaryPackage').after(`
                     <p class="text-muted small mb-1">Payment Type:</p>

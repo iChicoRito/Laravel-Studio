@@ -111,9 +111,9 @@
                                                 <span class="fw-semibold">₱{{ number_format($booking->total_amount, 2) }}</span>
                                                 <small class="text-muted d-block">
                                                     @if($booking->payment_type === 'downpayment')
-                                                        30% downpayment
+                                                        {{ $booking->downpayment_percentage ?? 30 }}% Downpayment
                                                     @else
-                                                        Full payment
+                                                        Full Payment
                                                     @endif
                                                 </small>
                                             </td>
@@ -196,12 +196,10 @@
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-4">
-                    <div id="bookingModalBody">
-                        <div class="text-center py-5">
-                            <div class="loading-spinner" style="width: 3rem; height: 3rem; margin: 0 auto;"></div>
-                            <p class="mt-3">Loading booking details...</p>
-                        </div>
+                <div class="modal-body p-4" id="bookingModalBody">
+                    <div class="text-center py-5">
+                        <div class="loading-spinner" style="width: 3rem; height: 3rem; margin: 0 auto;"></div>
+                        <p class="mt-3">Loading booking details...</p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -700,294 +698,499 @@
                 const assignedPhotographers = data.assignedPhotographers;
                 const paymentSummary = data.payment_summary;
 
-                let packagesHtml = '';
-                if (packages && packages.length > 0) {
-                    packages.forEach(pkg => {
-                        let inclusions = '';
-                        if (pkg.package_inclusions && Array.isArray(pkg.package_inclusions)) {
-                            inclusions = pkg.package_inclusions.map(inc => `<li>${inc}</li>`).join('');
+                // Format date
+                const eventDate = new Date(booking.event_date);
+                const formattedDate = eventDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                
+                // Format time (remove seconds if present)
+                const startTime = booking.start_time.substring(0, 5);
+                const endTime = booking.end_time.substring(0, 5);
+                
+                // Get provider logo
+                let providerLogo = '{{ asset("assets/images/sellers/7.png") }}';
+                if (provider) {
+                    if (providerType === 'studio' && provider.studio_logo) {
+                        providerLogo = '{{ asset("storage/") }}/' + provider.studio_logo;
+                    } else if (providerType === 'freelancer' && provider.brand_logo) {
+                        providerLogo = '{{ asset("storage/") }}/' + provider.brand_logo;
+                    }
+                }
+                
+                // Get provider name
+                let providerName = '';
+                if (provider) {
+                    if (providerType === 'studio') {
+                        providerName = provider.studio_name || 'Studio';
+                    } else {
+                        providerName = provider.brand_name || 'Freelancer';
+                    }
+                }
+                
+                // Get provider contact
+                let providerContact = '';
+                if (provider) {
+                    if (providerType === 'studio') {
+                        providerContact = provider.contact_number || '';
+                        if (provider.studio_email) {
+                            providerContact += providerContact ? ' • ' + provider.studio_email : provider.studio_email;
                         }
+                    } else {
+                        providerContact = provider.user ? provider.user.mobile_number || '' : '';
+                        if (provider.user && provider.user.email) {
+                            providerContact += providerContact ? ' • ' + provider.user.email : provider.user.email;
+                        }
+                    }
+                }
+                
+                // Get category name
+                const categoryName = category ? category.category_name : 'N/A';
+                
+                // Get location type display
+                const locationTypeDisplay = booking.location_type === 'in-studio' ? 'In-Studio' : 'On-Location';
+                
+                // Build location details for display
+                let locationDetails = '';
+                if (booking.location_type === 'on-location') {
+                    const parts = [];
+                    if (booking.venue_name) parts.push(booking.venue_name);
+                    if (booking.street) parts.push(booking.street);
+                    if (booking.barangay) parts.push('Brgy. ' + booking.barangay);
+                    if (booking.city) parts.push(booking.city);
+                    if (booking.province) parts.push(booking.province);
+                    locationDetails = parts.join(', ');
+                }
+                
+                // Build payment history
+                let paymentHistoryHtml = '';
+                if (payments && payments.length > 0) {
+                    payments.forEach(payment => {
+                        const paidDate = payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) : '';
                         
-                        packagesHtml += `
-                            <div class="card border mb-3">
-                                <div class="card-body">
-                                    <h6 class="fw-semibold mb-2">${pkg.package_name}</h6>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Price:</span>
-                                        <span class="fw-semibold">₱${parseFloat(pkg.package_price).toFixed(2)}</span>
+                        const paymentMethod = payment.payment_method ? payment.payment_method.replace('_', ' ').toUpperCase() : 'CARD';
+                        
+                        paymentHistoryHtml += `
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <div>
+                                    <div class="fw-medium">${paymentMethod}</div>
+                                    <small class="text-muted">${payment.payment_reference}</small>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-semibold">₱${parseFloat(payment.amount).toFixed(2)}</div>
+                                    <div>
+                                        <span class="badge ${payment.status === 'succeeded' ? 'badge-soft-success' : 'badge-soft-warning'}">
+                                            ${payment.status}
+                                        </span>
                                     </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Duration:</span>
-                                        <span>${pkg.duration} hours</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Photos:</span>
-                                        <span>${pkg.maximum_edited_photos} edited photos</span>
-                                    </div>
-                                    ${pkg.coverage_scope ? `
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Coverage:</span>
-                                            <span>${pkg.coverage_scope}</span>
-                                        </div>
-                                    ` : ''}
-                                    ${inclusions ? `
-                                        <div class="mt-3">
-                                            <small class="text-muted d-block mb-1">Inclusions:</small>
-                                            <ul class="mb-0 ps-3">${inclusions}</ul>
-                                        </div>
-                                    ` : ''}
+                                    ${paidDate ? `<small class="text-muted d-block">${paidDate}</small>` : ''}
                                 </div>
                             </div>
                         `;
                     });
                 }
+                
+                // Build packages HTML
+                let packagesHtml = '';
+                if (packages && packages.length > 0) {
+                    packages.forEach(pkg => {
+                        packagesHtml += `
+                            <div class="row g-2 mb-3">
+                                <div class="col-12">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Package</label>
+                                            <p class="mb-0 fw-medium">${pkg.package_name}</p>
+                                        </div>
+                                    </div>
+                                </div>
 
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Price</label>
+                                            <p class="mb-0 fw-medium">₱${parseFloat(pkg.package_price).toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Duration</label>
+                                            <p class="mb-0 fw-medium">${pkg.duration} hours</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Photos</label>
+                                            <p class="mb-0 fw-medium">${pkg.maximum_edited_photos} edited photos</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                ${pkg.coverage_scope ? `
+                                    <div class="col-12">
+                                        <div class="d-flex align-items-start">
+                                            <div class="flex-shrink-0">
+                                                <div class="bg-light-primary rounded-circle p-2">
+                                                    <i class="ti ti-star fs-20 text-primary"></i>
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow-1 ms-3">
+                                                <label class="text-muted small mb-1">Coverage</label>
+                                                <p class="mb-0 fw-medium">${pkg.coverage_scope}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${pkg.package_inclusions && Array.isArray(pkg.package_inclusions) && pkg.package_inclusions.length > 0 ? `
+                                    <div class="col-12">
+                                        <div class="d-flex align-items-start">
+                                            <div class="flex-shrink-0">
+                                                <div class="bg-light-primary rounded-circle p-2">
+                                                    <i class="ti ti-star fs-20 text-primary"></i>
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow-1 ms-3">
+                                                <label class="text-muted small mb-1">Inclusions</label>
+                                                <ul class="mb-0 ps-3">
+                                                    ${pkg.package_inclusions.map(inc => `<li class="fw-medium">${inc}</li>`).join('')}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    });
+                }
+                
+                // Build assigned photographers HTML
                 let assignedPhotographersHtml = '';
                 if (assignedPhotographers && assignedPhotographers.length > 0) {
                     assignedPhotographers.forEach(assignment => {
                         const photographer = assignment.photographer;
                         const studioPhotographer = assignment.studio_photographer;
-                        const initials = (photographer.first_name.charAt(0) + photographer.last_name.charAt(0)).toUpperCase();
+                        const photographerName = photographer ? `${photographer.first_name} ${photographer.last_name}` : 'Unknown';
                         
                         assignedPhotographersHtml += `
-                            <div class="d-flex align-items-center mb-2 p-2 border rounded">
-                                <div class="avatar-xl me-2">
-                                    <span class="avatar-title bg-info-subtle text-info rounded-circle me-2">${initials}</span>
+                            <div class="col-12">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-shrink-0">
+                                        <div class="bg-light-primary rounded-circle p-2">
+                                            <i class="ti ti-star fs-20 text-primary"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <label class="text-muted small mb-1">Photographers</label>
+                                        <p class="mb-0 fw-medium">
+                                            ${photographerName} 
+                                            ${studioPhotographer ? ` - ${studioPhotographer.position || 'Photographer'}` : ''}
+                                            <span class="badge ${getStatusBadgeClass(assignment.status)} ms-2">${assignment.status}</span>
+                                        </p>
+                                    </div>
                                 </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0">${photographer.first_name} ${photographer.last_name}</h6>
-                                    <small class="text-muted">${studioPhotographer ? studioPhotographer.position : 'Photographer'}</small>
-                                    ${studioPhotographer?.specialization ? `<small class="d-block text-muted">Specialization: ${studioPhotographer.specialization}</small>` : ''}
-                                </div>
-                                <span class="badge ${getStatusBadgeClass(assignment.status)}">${assignment.status}</span>
                             </div>
                         `;
                     });
                 } else {
                     assignedPhotographersHtml = `
-                        <div class="text-center py-3 border rounded">
-                            <i data-lucide="users" class="fs-20 text-muted mb-2"></i>
-                            <p class="mb-0 text-muted">No photographers assigned yet</p>
+                        <div class="col-12">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-shrink-0">
+                                    <div class="bg-light-primary rounded-circle p-2">
+                                        <i class="ti ti-star fs-20 text-primary"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <label class="text-muted small mb-1">Photographers</label>
+                                    <p class="mb-0 fw-medium">No photographers assigned yet</p>
+                                </div>
+                            </div>
                         </div>
                     `;
                 }
-
-                let paymentHistoryHtml = '';
-                if (payments && payments.length > 0) {
-                    payments.forEach(payment => {
-                        paymentHistoryHtml += `
-                            <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                                <div>
-                                    <span class="fw-medium">${payment.payment_reference}</span>
-                                    <small class="d-block text-muted">${payment.payment_method || 'Card'}</small>
-                                </div>
-                                <div class="text-end">
-                                    <span class="fw-semibold">₱${parseFloat(payment.amount).toFixed(2)}</span>
-                                    <small class="d-block ${payment.status === 'succeeded' ? 'text-success' : 'text-warning'}">
-                                        ${payment.status}
-                                    </small>
-                                    ${payment.paid_at ? `<small class="d-block text-muted">${new Date(payment.paid_at).toLocaleDateString()}</small>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-
+                
+                // Get downpayment percentage
+                let downpaymentPercentage = data.downpayment_percentage || 30;
+                
                 const modalContent = `
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <div class="card border-0 shadow-none mb-4">
-                                <div class="card-body p-0">
-                                    <h6 class="card-title mb-3 fw-semibold text-uppercase small text-primary">
-                                        Booking Information
-                                    </h6>
-                                    <div class="row g-3">
-                                        <div class="col-12">
-                                            <div class="d-flex align-items-start">
-                                                <div class="flex-shrink-0">
-                                                    <div class="bg-light-primary rounded-circle p-2">
-                                                        <i data-lucide="receipt-text" class="fs-20 text-primary"></i>
-                                                    </div>
-                                                </div>
-                                                <div class="flex-grow-1 ms-3">
-                                                    <label class="text-muted small mb-1">Booking Reference</label>
-                                                    <p class="mb-0 fw-semibold">${booking.booking_reference}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <div class="d-flex align-items-start">
-                                                <div class="flex-shrink-0">
-                                                    <div class="bg-light-primary rounded-circle p-2">
-                                                        <i data-lucide="calendar" class="fs-20 text-primary"></i>
-                                                    </div>
-                                                </div>
-                                                <div class="flex-grow-1 ms-3">
-                                                    <label class="text-muted small mb-1">Event Date & Time</label>
-                                                    <p class="mb-0 fw-medium">${new Date(booking.event_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                                    <small class="text-muted">${booking.start_time} - ${booking.end_time}</small>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <div class="d-flex align-items-start">
-                                                <div class="flex-shrink-0">
-                                                    <div class="bg-light-primary rounded-circle p-2">
-                                                        <i data-lucide="map-pin" class="fs-20 text-primary"></i>
-                                                    </div>
-                                                </div>
-                                                <div class="flex-grow-1 ms-3">
-                                                    <label class="text-muted small mb-1">Event Location</label>
-                                                    <p class="mb-0 fw-medium">${booking.location_type === 'in-studio' ? 'In-Studio' : 'On-Location'}</p>
-                                                    ${booking.venue_name || booking.street ? `
-                                                        <small class="text-muted">
-                                                            ${booking.venue_name ? booking.venue_name + ', ' : ''}
-                                                            ${booking.street ? booking.street + ', ' : ''}
-                                                            ${booking.barangay ? 'Brgy. ' + booking.barangay + ', ' : ''}
-                                                            ${booking.city ? booking.city + ', ' : ''}
-                                                            ${booking.province ? booking.province : ''}
-                                                        </small>
-                                                    ` : ''}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <div class="d-flex align-items-start">
-                                                <div class="flex-shrink-0">
-                                                    <div class="bg-light-primary rounded-circle p-2">
-                                                        <i data-lucide="layers" class="fs-20 text-primary"></i>
-                                                    </div>
-                                                </div>
-                                                <div class="flex-grow-1 ms-3">
-                                                    <label class="text-muted small mb-1">Service Category</label>
-                                                    <p class="mb-0 fw-medium">${category ? category.category_name : 'N/A'}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        ${booking.special_requests ? `
-                                            <div class="col-12">
-                                                <div class="d-flex align-items-start">
-                                                    <div class="flex-shrink-0">
-                                                        <div class="bg-light-primary rounded-circle p-2">
-                                                            <i data-lucide="message-square" class="fs-20 text-primary"></i>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex-grow-1 ms-3">
-                                                        <label class="text-muted small mb-1">Special Requests</label>
-                                                        <p class="mb-0 fw-medium">${booking.special_requests}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ` : ''}
-                                    </div>
+                    <div class="row align-items-center mb-4">
+                        <div class="col-12 col-lg-8">
+                            <div class="d-flex align-items-center flex-column flex-md-row">
+                                <div class="flex-shrink-0 mb-3 mb-md-0">
+                                    <img src="${providerLogo}" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;" alt="${providerName}">
                                 </div>
-                            </div>
-
-                            <div class="card border-0 shadow-none mb-4">
-                                <div class="card-body p-0">
-                                    <h6 class="card-title mb-3 fw-semibold text-uppercase small text-primary">
-                                        Service Provider
-                                    </h6>
-                                    <div class="d-flex align-items-center p-3 border rounded">
-                                        ${provider ? `
-                                            <div class="avatar-xl me-3">
-                                                <img src="${provider && (providerType === 'studio' ? (provider.studio_logo ? '{{ asset("storage/") }}/' + provider.studio_logo : '{{ asset("assets/images/sellers/7.png") }}') : (provider.brand_logo ? '{{ asset("storage/") }}/' + provider.brand_logo : '{{ asset("assets/images/sellers/3.png") }}')) || '{{ asset("assets/images/sellers/7.png") }}'}" 
-                                                     class="rounded-circle" style="width: 60px; height: 60px; object-fit: cover;" alt="Provider Logo">
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <h6 class="mb-1 fw-semibold">
-                                                    ${providerType === 'studio' ? provider.studio_name : provider.brand_name}
-                                                </h6>
-                                                <small class="text-muted">
-                                                    ${provider.contact_number ? provider.contact_number + ' • ' : ''}
-                                                    ${provider.contact_email || provider.studio_email || ''}
-                                                </small>
-                                            </div>
-                                        ` : `
-                                            <div class="text-center w-100">
-                                                <small class="text-muted">Provider information not available</small>
-                                            </div>
-                                        `}
+                                
+                                <div class="flex-grow-1 ms-md-4 text-center text-md-start">
+                                    <h2 class="mb-1 h3 h3-md">${providerName}</h2>
+                                    <div class="d-flex align-items-center justify-content-center justify-content-md-start mb-2 flex-wrap">
+                                        <span class="badge ${getStatusBadgeClassForBooking(booking.status)} p-1">${booking.status.replace('_', ' ').toUpperCase()}</span>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="card border-0 shadow-none mb-4">
-                                <div class="card-body p-0">
-                                    <h6 class="card-title mb-3 fw-semibold text-uppercase small text-primary">
-                                        Payment Information
-                                    </h6>
-                                    <div class="bg-light p-3 rounded mb-3">
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Total Amount:</span>
-                                            <span class="fw-semibold">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Down Payment:</span>
-                                            <span class="fw-medium">₱${parseFloat(paymentSummary.down_payment).toFixed(2)}</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Amount Paid:</span>
-                                            <span class="fw-medium text-success">₱${parseFloat(paymentSummary.total_paid).toFixed(2)}</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between pt-2 border-top">
-                                            <span class="fw-semibold">Remaining Balance:</span>
-                                            <span class="fw-bold ${paymentSummary.remaining_balance > 0 ? 'text-danger' : 'text-success'}">
-                                                ₱${parseFloat(paymentSummary.remaining_balance).toFixed(2)}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    ${paymentHistoryHtml ? `
-                                        <div class="mt-3">
-                                            <h6 class="fw-semibold mb-2">Payment History</h6>
-                                            ${paymentHistoryHtml}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-
-                            <div class="card border-0 shadow-none mb-4">
-                                <div class="card-body p-0">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <h6 class="card-title mb-0 fw-semibold text-uppercase small text-primary">
-                                            Packages
-                                        </h6>
-                                    </div>
-                                    ${packagesHtml || '<p class="text-muted">No package information available</p>'}
-                                </div>
-                            </div>
-
-                            <div class="card border-0 shadow-none">
-                                <div class="card-body p-0">
-                                    <h6 class="card-title mb-3 fw-semibold text-uppercase small text-primary">
-                                        Assigned Photographers
-                                    </h6>
-                                    <div id="assignedPhotographersList">
-                                        ${assignedPhotographersHtml}
-                                    </div>
+                                    
+                                    <p class="text-muted mb-0">
+                                        <i class="ti ti-star me-1"></i> ${locationTypeDisplay} | ${categoryName}
+                                    </p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="alert alert-light border">
-                                <div class="d-flex align-items-center">
-                                    <i data-lucide="info" class="fs-20 text-primary me-3"></i>
-                                    <div>
-                                        <h6 class="mb-1">Booking Status: <span class="${getStatusTextClass(booking.status)}">${booking.status.replace('_', ' ').toUpperCase()}</span></h6>
-                                        <p class="mb-0 small text-muted">
-                                            Payment Status: <span class="${getPaymentStatusTextClass(booking.payment_status)}">${booking.payment_status.replace('_', ' ').toUpperCase()}</span> | 
-                                            Payment Type: ${booking.payment_type === 'downpayment' ? '30% Down Payment' : 'Full Payment'}
-                                        </p>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">BOOKING INFORMATION</h5>
+                                
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-hash fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Booking Reference</label>
+                                            <p class="mb-0 fw-medium">${booking.booking_reference}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-calendar fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Event Date & Time</label>
+                                            <p class="mb-0 fw-medium">${formattedDate}<br>${startTime} - ${endTime}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-map-pin fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Event Location</label>
+                                            <p class="mb-0 fw-medium">${locationTypeDisplay}</p>
+                                            ${locationDetails ? `<small class="text-muted">${locationDetails}</small>` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-category fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Service Category</label>
+                                            <p class="mb-0 fw-medium">${categoryName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                ${booking.special_requests ? `
+                                    <div class="col-12">
+                                        <div class="d-flex align-items-start">
+                                            <div class="flex-shrink-0">
+                                                <div class="bg-light-primary rounded-circle p-2">
+                                                    <i class="ti ti-message fs-20 text-primary"></i>
+                                                </div>
+                                            </div>
+                                            <div class="flex-grow-1 ms-3">
+                                                <label class="text-muted small mb-1">Special Requests</label>
+                                                <p class="mb-0 fw-medium">${booking.special_requests}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">SERVICE PROVIDER</h5>
+                                
+                                <div class="col-12">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-building-store fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Provider</label>
+                                            <p class="mb-0 fw-medium">${providerName}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-phone fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Contact</label>
+                                            <p class="mb-0 fw-medium">${providerContact || 'No contact information'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">PAYMENT INFORMATION</h5>
+                                
+                                <div class="col-12">
+                                    <div class="card border bg-light">
+                                        <div class="card-body p-3">
+                                            {{-- Receipt Header --}}
+                                            <div class="text-start mb-3 pb-2 border-bottom">
+                                                <h6 class="fw-bold mb-1">PAYMENT RECEIPT</h6>
+                                                <small class="text-muted">Booking #${booking.booking_reference}</small>
+                                            </div>
+                                            
+                                            {{-- Receipt Items --}}
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-muted">Package Subtotal:</span>
+                                                    <span class="fw-medium">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
+                                                </div>
+                                                
+                                                ${booking.payment_type === 'downpayment' ? `
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <span class="text-muted">Down Payment (${downpaymentPercentage}%):</span>
+                                                        <span class="fw-medium">- ₱${parseFloat(paymentSummary.down_payment).toFixed(2)}</span>
+                                                    </div>
+                                                ` : ''}
+                                                
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="text-muted">Amount Paid:</span>
+                                                    <span class="fw-medium text-success">₱${parseFloat(paymentSummary.total_paid).toFixed(2)}</span>
+                                                </div>
+                                                
+                                                {{-- Divider --}}
+                                                <div class="border-top border-bottom-0 my-3"></div>
+                                                
+                                                {{-- Totals --}}
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-bold">Total Amount:</span>
+                                                    <span class="fw-bold">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
+                                                </div>
+                                                
+                                                <div class="d-flex justify-content-between align-items-center ${paymentSummary.remaining_balance > 0 ? 'text-danger' : 'text-success'} fw-bold">
+                                                    <span>Remaining Balance:</span>
+                                                    <span>₱${parseFloat(paymentSummary.remaining_balance).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            {{-- Payment Status Badge --}}
+                                            <div class="text-start mt-3 pt-2 border-top">
+                                                <span class="badge ${getPaymentStatusBadgeClass(booking.payment_status)} px-3 py-2">
+                                                    <i class="ti ti-circle-check me-1"></i>
+                                                    ${booking.payment_status.replace('_', ' ').toUpperCase()}
+                                                </span>
+                                                <small class="d-block text-muted mt-2">
+                                                    Payment Type: ${booking.payment_type === 'downpayment' ? downpaymentPercentage + '% Down Payment' : 'Full Payment'}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {{-- Payment History --}}
+                                ${paymentHistoryHtml ? `
+                                    <div class="col-12 mt-3">
+                                        <div class="card border">
+                                            <div class="card-header bg-transparent py-2">
+                                                <h6 class="mb-0 fw-semibold">
+                                                    <i class="ti ti-history me-2"></i>Payment History
+                                                </h6>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                ${paymentHistoryHtml}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+
+                            ${packagesHtml}
+
+                            <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">ASSIGNED PHOTOGRAPHERS</h5>
+                                ${assignedPhotographersHtml}
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">BOOKING STATUS</h5>
+                                
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-checklist fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Booking Status</label>
+                                            <p class="mb-0 fw-medium"><span class="badge ${getStatusBadgeClassForBooking(booking.status)}">${booking.status.replace('_', ' ').toUpperCase()}</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-credit-card fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Payment Status</label>
+                                            <p class="mb-0 fw-medium">
+                                                <span class="badge ${getPaymentStatusBadgeClass(booking.payment_status)}">${booking.payment_status.replace('_', ' ').toUpperCase()}</span> | 
+                                                Payment Type: ${booking.payment_type === 'downpayment' ? downpaymentPercentage + '% Down Payment' : 'Full Payment'}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -998,6 +1201,31 @@
                 $('#bookingReference').text(booking.booking_reference);
                 $('#bookingModalBody').html(modalContent);
                 loadIcons();
+            }
+
+            // Helper function for booking status badge
+            function getStatusBadgeClassForBooking(status) {
+                const badgeClasses = {
+                    'pending': 'badge-soft-warning',
+                    'confirmed': 'badge-soft-success',
+                    'in_progress': 'badge-soft-info',
+                    'completed': 'badge-soft-secondary',
+                    'cancelled': 'badge-soft-danger'
+                };
+                return badgeClasses[status] || 'badge-soft-secondary';
+            }
+
+            // Helper function for payment status badge
+            function getPaymentStatusBadgeClass(status) {
+                const badgeClasses = {
+                    'pending': 'badge-soft-warning',
+                    'partially_paid': 'badge-soft-info',
+                    'paid': 'badge-soft-success',
+                    'failed': 'badge-soft-danger',
+                    'refunded': 'badge-soft-secondary',
+                    'cancelled': 'badge-soft-danger'
+                };
+                return badgeClasses[status] || 'badge-soft-secondary';
             }
 
             // Cancel booking function
@@ -1102,6 +1330,35 @@
                     lucide.createIcons();
                 }
             }
+
+            // Load downpayment percentages for all bookings in the table
+            function loadDownpaymentPercentages() {
+                $('.downpayment-label').each(function() {
+                    const $label = $(this);
+                    const bookingId = $label.data('booking-id');
+                    const bookingType = $label.data('booking-type');
+                    const providerId = $label.data('provider-id');
+                    
+                    if (bookingType === 'studio') {
+                        // For studio bookings, we need to fetch the percentage
+                        // You can either pre-load this data or make an API call
+                        // Option 1: Use data attribute if available (recommended - add to booking object)
+                        // Option 2: Make an API call (less efficient)
+                        
+                        // For now, we'll use the value from the booking object if available
+                        // This requires adding downpayment_percentage to the booking object in the controller
+                        
+                        // Since we don't have it in the current implementation, 
+                        // we'll set a default and update when booking details are loaded
+                        $label.text('30% Downpayment');
+                    } else {
+                        $label.text('30% Downpayment');
+                    }
+                });
+            }
+
+            // Call on page load
+            loadDownpaymentPercentages();
 
             // Initialize icons
             loadIcons();

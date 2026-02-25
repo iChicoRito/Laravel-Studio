@@ -92,7 +92,6 @@ Route::middleware(['auth'])->group(function () {
         // Dashboard
         Route::get('/dashboard',                                [\App\Http\Controllers\StudioOwner\DashboardController::class, 'index'])->name('owner.dashboard');
 
-
         // Manage Studio - Limit
         Route::middleware(['check.studio.limit'])->group(function () {
             Route::get('/create/studio',                        [\App\Http\Controllers\StudioOwner\StudioController::class, 'create'])->name('owner.studio.create');

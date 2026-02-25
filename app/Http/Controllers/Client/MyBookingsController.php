@@ -30,16 +30,20 @@ class MyBookingsController extends Controller
             ])
             ->paginate(10);
         
-        // Manually load provider details after fetching bookings
+        // Manually load provider details after fetching bookings and add downpayment percentage
         $bookings->each(function($booking) {
             if ($booking->booking_type === 'studio') {
-                $booking->provider = \App\Models\StudioOwner\StudiosModel::where('id', $booking->provider_id)
-                    ->select('id', 'studio_name', 'studio_logo')
+                $studio = \App\Models\StudioOwner\StudiosModel::where('id', $booking->provider_id)
+                    ->select('id', 'studio_name', 'studio_logo', 'downpayment_percentage')
                     ->first();
+                $booking->provider = $studio;
+                $booking->downpayment_percentage = $studio->downpayment_percentage ?? 30;
             } else {
-                $booking->provider = \App\Models\Freelancer\ProfileModel::where('user_id', $booking->provider_id)
+                $freelancer = \App\Models\Freelancer\ProfileModel::where('user_id', $booking->provider_id)
                     ->select('user_id', 'brand_name', 'brand_logo')
                     ->first();
+                $booking->provider = $freelancer;
+                $booking->downpayment_percentage = 30; // Default for freelancer
             }
         });
         
@@ -92,21 +96,27 @@ class MyBookingsController extends Controller
                 ->with([
                     'category:id,category_name',
                     'packages:id,booking_id,package_name,package_price,package_inclusions,duration,maximum_edited_photos,coverage_scope',
-                    'payments:id,booking_id,amount,status,payment_method,paid_at',
+                    'payments:id,booking_id,amount,status,payment_method,paid_at,payment_reference',
                     'assignedPhotographers.photographer:id,first_name,last_name',
                     'assignedPhotographers.studioPhotographer:id,photographer_id,position,specialization,years_of_experience'
                 ])
                 ->findOrFail($id);
             
-            // Get provider details based on booking type - FIXED VERSION
+            // Get provider details based on booking type
             $provider = null;
             $providerType = null;
+            $downpaymentPercentage = 30; // Default fallback
             
             if ($booking->booking_type === 'studio') {
                 $provider = \App\Models\StudioOwner\StudiosModel::where('id', $booking->provider_id)
-                    ->select('id', 'studio_name', 'studio_logo', 'contact_number', 'studio_email', 'starting_price')
+                    ->select('id', 'studio_name', 'studio_logo', 'contact_number', 'studio_email', 'starting_price', 'downpayment_percentage')
                     ->first();
                 $providerType = 'studio';
+                
+                // Get downpayment percentage from studio
+                if ($provider && $provider->downpayment_percentage) {
+                    $downpaymentPercentage = $provider->downpayment_percentage;
+                }
             } else {
                 $provider = \App\Models\Freelancer\ProfileModel::where('user_id', $booking->provider_id)
                     ->select('user_id as id', 'brand_name', 'brand_logo', 'starting_price')
@@ -121,6 +131,9 @@ class MyBookingsController extends Controller
                     $provider->contact_email = $user->email ?? null;
                     $provider->contact_number = $user->mobile_number ?? null;
                 }
+                
+                // For freelancer, you can set a default or add a column later
+                $downpaymentPercentage = 30; // Default for freelancer
             }
             
             // Calculate payment summary
@@ -136,6 +149,7 @@ class MyBookingsController extends Controller
                 'packages' => $booking->packages,
                 'payments' => $booking->payments,
                 'assignedPhotographers' => $booking->assignedPhotographers,
+                'downpayment_percentage' => $downpaymentPercentage, // ADD THIS
                 'payment_summary' => [
                     'total_amount' => $booking->total_amount,
                     'down_payment' => $booking->down_payment,

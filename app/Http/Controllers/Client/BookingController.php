@@ -54,7 +54,9 @@ class BookingController extends Controller
             if (is_string($operatingDays)) {
                 $operatingDays = json_decode($operatingDays, true) ?? [];
             }
-
+            
+            // Get downpayment percentage
+            $downpaymentPercentage = $provider->downpayment_percentage ?? 30;
         } else {
             $provider = ProfileModel::with(['user', 'categories', 'schedule'])
                 ->whereHas('user', function($query) {
@@ -98,7 +100,8 @@ class BookingController extends Controller
             'user', 
             'availableDates',
             'municipalities',
-            'operatingDays'
+            'operatingDays',
+            'downpaymentPercentage'
         ));
     }
 
@@ -421,8 +424,16 @@ class BookingController extends Controller
             $totalAmount = $package->package_price;
             
             if ($request->payment_type === 'downpayment') {
-                $downPayment = $totalAmount * 0.3; // 30% downpayment
-                // ========== FIXED: remaining_balance should be total - downpayment = 12,600 ==========
+                // Get the downpayment percentage from the provider
+                if ($request->type === 'studio') {
+                    $studio = StudiosModel::find($request->provider_id);
+                    $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
+                } else {
+                    // For freelancer, default to 30% or use any freelancer-specific logic
+                    $downpaymentPercentage = 30;
+                }
+                
+                $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
                 $remainingBalance = $totalAmount - $downPayment;
                 $paymentStatus = 'pending';
                 $bookingStatus = 'pending';
@@ -431,6 +442,19 @@ class BookingController extends Controller
                 $remainingBalance = 0;
                 $paymentStatus = 'pending';
                 $bookingStatus = 'pending';
+            }
+
+            // Get the downpayment percentage for deposit_policy
+            $depositPolicy = '100%'; // Default for full payment
+            if ($request->payment_type === 'downpayment') {
+                if ($request->type === 'studio') {
+                    $studio = StudiosModel::find($request->provider_id);
+                    $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
+                    $depositPolicy = $downpaymentPercentage . '%';
+                } else {
+                    // For freelancer, default to 30%
+                    $depositPolicy = '30%';
+                }
             }
 
             // 5. Create booking
@@ -452,8 +476,8 @@ class BookingController extends Controller
                 'special_requests' => $request->special_requests,
                 'total_amount' => $totalAmount,
                 'down_payment' => $downPayment,
-                'remaining_balance' => $remainingBalance, // This should be 12,600 for downpayment
-                'deposit_policy' => $request->payment_type === 'downpayment' ? '30%' : '100%',
+                'remaining_balance' => $remainingBalance,
+                'deposit_policy' => $depositPolicy,
                 'payment_type' => $request->payment_type,
                 'status' => $bookingStatus,
                 'payment_status' => $paymentStatus,
@@ -662,10 +686,19 @@ class BookingController extends Controller
             // Determine payment description
             $totalPaid = $booking->payments()->where('status', 'succeeded')->sum('amount');
             $isBalancePayment = $totalPaid > 0;
-            
+
+            // Get the downpayment percentage for display
+            $downpaymentText = '30%'; // Default
+            if ($booking->booking_type === 'studio') {
+                $studio = StudiosModel::find($booking->provider_id);
+                if ($studio && $studio->downpayment_percentage) {
+                    $downpaymentText = $studio->downpayment_percentage . '%';
+                }
+            }
+
             $description = $isBalancePayment 
                 ? 'Balance Payment - ' . $booking->booking_reference 
-                : 'Booking ' . ($booking->payment_type === 'downpayment' ? 'Deposit' : 'Payment') . ' - ' . $booking->booking_reference;
+                : 'Booking ' . ($booking->payment_type === 'downpayment' ? $downpaymentText . ' Deposit' : 'Payment') . ' - ' . $booking->booking_reference;
 
             // Create Stripe checkout session
             $checkoutSession = $this->stripeService->createCheckoutSession(
@@ -1237,15 +1270,20 @@ class BookingController extends Controller
 
         if ($request->type === 'studio') {
             $package = StudioPackagesModel::findOrFail($request->package_id);
+            // Get downpayment percentage
+            $studio = StudiosModel::find($package->studio_id);
+            $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
         } else {
             // ========== MODIFIED: Get freelancer package ==========
             $package = FreelancerPackagesModel::findOrFail($request->package_id);
+            // For freelancer, default to 30%
+            $downpaymentPercentage = 30;
         }
 
         $totalAmount = $package->package_price;
         
         if ($request->payment_type === 'downpayment') {
-            $downPayment = $totalAmount * 0.3;
+            $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
             $remainingBalance = $totalAmount - $downPayment;
         } else {
             $downPayment = $totalAmount;
@@ -1257,6 +1295,7 @@ class BookingController extends Controller
             'package_price' => number_format($package->package_price, 2),
             'total_amount' => number_format($totalAmount, 2),
             'down_payment' => number_format($downPayment, 2),
+            'downpayment_percentage' => $downpaymentPercentage, // Add this for display
             'remaining_balance' => number_format($remainingBalance, 2),
             'inclusions' => $package->package_inclusions,
             'duration' => $package->duration,
