@@ -42,6 +42,7 @@
                                         <th data-table-sort>Studio</th>
                                         <th data-table-sort>Category</th>
                                         <th data-table-sort>Package Name</th>
+                                        <th data-table-sort>Location</th>
                                         <th data-table-sort>Price</th>
                                         <th data-table-sort>Online Gallery</th>
                                         <th data-table-sort>Photographers</th>
@@ -57,6 +58,17 @@
                                             <td>{{ $package->studio->studio_name ?? 'N/A' }}</td>
                                             <td>{{ $package->category->category_name ?? 'N/A' }}</td>
                                             <td>{{ $package->package_name }}</td>
+                                            <td>
+                                                @if($package->package_location == 'In-Studio')
+                                                    <span class="badge badge-soft-primary fs-8 px-1 w-100">
+                                                        <i class="ti ti-building me-1"></i> In-Studio
+                                                    </span>
+                                                @else
+                                                    <span class="badge badge-soft-info fs-8 px-1 w-100">
+                                                        <i class="ti ti-map-pin me-1"></i> On-Location
+                                                    </span>
+                                                @endif
+                                            </td>
                                             <td>PHP {{ number_format($package->package_price, 2) }}</td>
                                             <td>
                                                 @if($package->online_gallery)

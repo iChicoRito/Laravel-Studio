@@ -33,6 +33,7 @@ class PackagesModel extends Model
         'package_price',
         'online_gallery',
         'photographer_count',
+        'package_location',
         'status',
     ];
 

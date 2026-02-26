@@ -39,10 +39,21 @@ class PackageStoreRequest extends FormRequest
             'package_inclusions' => 'required|string|min:1',
             'duration' => 'required|integer|min:1|max:24',
             'maximum_edited_photos' => 'required|integer|min:1|max:1000',
-            'coverage_scope' => 'nullable|string|max:500',
+            // MODIFIED: Conditional validation for coverage_scope
+            'coverage_scope' => [
+                'nullable',
+                'string',
+                'max:500',
+                function ($attribute, $value, $fail) {
+                    if ($this->package_location === 'On-Location' && empty($value)) {
+                        $fail('Coverage scope is required for on-location packages.');
+                    }
+                },
+            ],
             'package_price' => 'required|numeric|min:0',
-            'online_gallery' => 'required|boolean',              // Added
-            'photographer_count' => 'required|integer|min:0|max:10', // Added
+            'online_gallery' => 'required|boolean',
+            'photographer_count' => 'required|integer|min:0|max:10',
+            'package_location' => 'required|in:In-Studio,On-Location', // ADDED
             'status' => 'required|in:active,inactive',
         ];
     }
@@ -75,6 +86,8 @@ class PackageStoreRequest extends FormRequest
             'photographer_count.required' => 'Please specify number of photographers.',      // Added
             'photographer_count.min' => 'Photographer count cannot be negative.',            // Added
             'photographer_count.max' => 'Maximum of 10 photographers allowed.',              // Added
+            'package_location.required' => 'Please select a location type.', // ADDED
+            'package_location.in' => 'Invalid location type selected.', // ADDED
         ];
     }
 }

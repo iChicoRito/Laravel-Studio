@@ -73,6 +73,17 @@
         .availability-dot.unavailable {
             background: #dc3545;
         }
+
+        #locationType:disabled {
+            background-color: #f8f9fa;
+            opacity: 0.8;
+            cursor: not-allowed;
+        }
+
+        .location-type-note {
+            color: #6c757d;
+            font-style: italic;
+        }
     </style>
 @endsection
 
@@ -257,6 +268,9 @@
                                             <div class="invalid-feedback">
                                                 Please select a valid location type.
                                             </div>
+                                            <small class="text-muted location-type-note">
+                                                <i class="ti ti-info-circle me-1"></i> Location type is automatically determined by your selected package.
+                                            </small>
                                         </div>
 
                                         <div id="locationDetails" style="display: none;">
@@ -537,6 +551,11 @@
 
             // Load packages when category is selected
             $('#serviceCategory').on('change', function() {
+                // Reset location type when category changes
+                $('#locationType').val('').prop('disabled', false);
+                $('#locationType').closest('.col-12').find('.badge.badge-soft-info').remove();
+                $('#locationDetails').hide();
+                
                 const categoryId = $(this).val();
                 const type = $('#bookingType').val();
                 const providerId = $('#providerId').val();
@@ -576,38 +595,63 @@
                             let packagesHtml = '<div class="row g-3">';
                             
                             response.packages.forEach(function(package, index) {
+                                // FIXED: Ensure package data is properly stringified for the data-package attribute
+                                const packageJson = JSON.stringify(package)
+                                    .replace(/"/g, '&quot;') // Escape quotes for HTML attribute
+                                    .replace(/'/g, "&#39;"); // Escape single quotes
+                                
                                 const durationText = package.duration === 1 ? '1 Hour' : `${package.duration} Hours`;
                                 const priceText = `₱${parseFloat(package.package_price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                                 
-                                // Parse inclusions properly
+                                // Parse inclusions safely
                                 let inclusions = [];
-                                if (typeof package.package_inclusions === 'string') {
+                                if (package.package_inclusions) {
                                     try {
-                                        inclusions = JSON.parse(package.package_inclusions);
-                                        if (!Array.isArray(inclusions)) {
-                                            inclusions = [inclusions];
+                                        if (typeof package.package_inclusions === 'string') {
+                                            // Handle the specific format from your database
+                                            let cleanedStr = package.package_inclusions;
+                                            // Remove outer quotes if they exist
+                                            if (cleanedStr.startsWith('"') && cleanedStr.endsWith('"')) {
+                                                cleanedStr = cleanedStr.slice(1, -1);
+                                            }
+                                            // Split by comma if it's a comma-separated string
+                                            if (cleanedStr.includes(',')) {
+                                                inclusions = cleanedStr.split(',').map(item => item.trim());
+                                            } else {
+                                                // Try JSON parse
+                                                try {
+                                                    const parsed = JSON.parse(cleanedStr);
+                                                    if (Array.isArray(parsed)) {
+                                                        inclusions = parsed;
+                                                    } else {
+                                                        inclusions = [parsed];
+                                                    }
+                                                } catch (e) {
+                                                    // If all else fails, use as single item
+                                                    inclusions = [cleanedStr];
+                                                }
+                                            }
+                                        } else if (Array.isArray(package.package_inclusions)) {
+                                            inclusions = package.package_inclusions;
                                         }
                                     } catch (e) {
-                                        if (package.package_inclusions.includes(',')) {
-                                            inclusions = package.package_inclusions.split(',').map(item => item.trim());
-                                        } else {
-                                            inclusions = [package.package_inclusions];
-                                        }
+                                        console.warn('Error parsing inclusions:', e);
                                     }
-                                } else if (Array.isArray(package.package_inclusions)) {
-                                    inclusions = package.package_inclusions;
-                                } else {
-                                    inclusions = [];
                                 }
                                 
                                 const isStudio = $('#bookingType').val() === 'studio';
+                                
+                                // Location badge HTML
+                                const locationBadge = package.package_location === 'On-Location' 
+                                    ? '<span class="badge badge-soft-info"><i class="ti ti-map-pin me-1"></i> On-Location</span>'
+                                    : '<span class="badge badge-soft-primary"><i class="ti ti-building me-1"></i> In-Studio</span>';
                                 
                                 packagesHtml += `
                                     <div class="col-md-6 col-xl-4">
                                         <input type="radio" class="btn-check package-radio" 
                                             name="package" value="${package.id}" 
                                             id="package${package.id}" 
-                                            data-package='${JSON.stringify(package)}' 
+                                            data-package='${packageJson}'
                                             style="display: none;">
                                         
                                         <label class="card border h-100 package-card" for="package${package.id}" style="cursor: pointer;">
@@ -618,6 +662,11 @@
                                                 </div>
                                                 
                                                 <p class="text-muted small mb-3">${package.package_description ? package.package_description.substring(0, 80) + (package.package_description.length > 80 ? '...' : '') : 'No description available.'}</p>
+                                                
+                                                <!-- Location type display in package card -->
+                                                <div class="d-flex align-items-center mb-2">
+                                                    ${locationBadge}
+                                                </div>
                                                 
                                                 <div class="d-flex align-items-center mb-2">
                                                     ${package.online_gallery ? 
@@ -727,8 +776,78 @@
             // Handle package selection
             $(document).on('change', '.package-radio', function() {
                 selectedPackageId = $(this).val();
-                const packageData = $(this).data('package');
+                
+                // SAFELY get package data with error handling
+                let packageData;
+                try {
+                    const dataAttr = $(this).attr('data-package');
+                    if (!dataAttr || dataAttr === 'undefined' || dataAttr === 'null') {
+                        console.error('Package data attribute is missing or invalid');
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Package Data Error',
+                            text: 'Unable to load package details. Please try again.',
+                            confirmButtonColor: '#3475db'
+                        });
+                        return;
+                    }
+                    
+                    packageData = JSON.parse(dataAttr);
+                    console.log('Selected package data:', packageData);
+                    
+                } catch (e) {
+                    console.error('Error parsing package data:', e);
+                    console.log('Raw data attribute:', $(this).attr('data-package'));
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Package Data Error',
+                        text: 'Unable to parse package details. Please refresh and try again.',
+                        confirmButtonColor: '#3475db'
+                    });
+                    return;
+                }
+                
                 const paymentType = $('input[name="payment_type"]:checked').val();
+                
+                // AUTO-POPULATE LOCATION TYPE BASED ON SELECTED PACKAGE
+                if (packageData && packageData.package_location) {
+                    const packageLocation = packageData.package_location;
+                    console.log('Package location:', packageLocation);
+                    
+                    // Set the location type dropdown value
+                    if (packageLocation === 'In-Studio') {
+                        $('#locationType').val('in-studio');
+                        console.log('Set location type to: in-studio');
+                    } else if (packageLocation === 'On-Location') {
+                        $('#locationType').val('on-location');
+                        console.log('Set location type to: on-location');
+                    } else {
+                        console.warn('Unknown package_location value:', packageLocation);
+                        $('#locationType').val('');
+                    }
+                    
+                    // Remove any existing badge first
+                    $('#locationType').closest('.col-12').find('.badge.badge-soft-info').remove();
+                    
+                    // Disable the location type dropdown since it's now automatically populated
+                    $('#locationType').prop('disabled', true);
+                    
+                    // Add a visual indicator that this is auto-populated
+                    $('#locationType').closest('.col-12').find('.form-label').append(
+                        '<span class="badge badge-soft-info ms-2" style="font-size: 0.65rem;">' +
+                        '<i class="ti ti-info-circle me-1"></i>Auto-set by package</span>'
+                    );
+                    
+                    // Trigger change event to update location details visibility
+                    $('#locationType').trigger('change');
+                } else {
+                    console.warn('Package data missing package_location:', packageData);
+                    // Reset location type if package doesn't have location info
+                    $('#locationType').val('').prop('disabled', false);
+                    $('#locationType').closest('.col-12').find('.badge.badge-soft-info').remove();
+                }
+                
                 getBookingSummaryWithPaymentType(packageData, paymentType);
             });
             
@@ -887,7 +1006,7 @@
                     event_date: $('#eventDate').val(),
                     start_time: $('#startTime').val(),
                     end_time: $('#endTime').val(),
-                    location_type: $('#locationType').val(),
+                    location_type: $('#locationType').val(), // This is now auto-populated from package
                     venue_name: $('#venueName').val(),
                     street: $('#street').val(),
                     barangay: $('#barangay').val(),
@@ -961,10 +1080,18 @@
             // ========== Functions ==========
 
             function getBookingSummaryWithPaymentType(packageData, paymentType) {
-                if (!packageData || !packageData.id) {
-                    console.error('Package data or ID is missing');
+                // ADDED: Better validation
+                if (!packageData) {
+                    console.error('Package data is null or undefined');
                     return;
                 }
+                
+                if (!packageData.id) {
+                    console.error('Package ID is missing from package data:', packageData);
+                    return;
+                }
+                
+                console.log('Getting summary for package:', packageData.id, 'Payment type:', paymentType);
                 
                 $.ajax({
                     url: '{{ route("client.bookings.summary") }}',
@@ -976,6 +1103,8 @@
                         _token: '{{ csrf_token() }}'
                     },
                     success: function(response) {
+                        console.log('Summary response:', response);
+                        
                         if (response.success) {
                             window.bookingSummary = response.summary;
                             
@@ -993,10 +1122,13 @@
                                     `);
                                 }
                             }
+                        } else {
+                            console.error('Summary response error:', response.message);
                         }
                     },
                     error: function(xhr) {
-                        console.error('Summary error:', xhr);
+                        console.error('Summary AJAX error:', xhr);
+                        console.error('Summary error response:', xhr.responseJSON);
                     }
                 });
             }
@@ -1037,6 +1169,18 @@
                         icon: 'warning',
                         title: 'Package Required',
                         text: 'Please select a package.',
+                        confirmButtonColor: '#3475db'
+                    });
+                    return false;
+                }
+                
+                // MODIFIED: Location type validation - check if it's set (should be auto-populated)
+                const locationType = $('#locationType').val();
+                if (!locationType) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Location Type Error',
+                        text: 'Please select a package first to determine location type.',
                         confirmButtonColor: '#3475db'
                     });
                     return false;
@@ -1117,9 +1261,9 @@
                     formatTime(bookingData.start_time) + ' - ' + formatTime(bookingData.end_time)
                 );
                 
-                $('#summaryLocationType').text(
-                    bookingData.location_type === 'in-studio' ? 'In-Studio' : 'On-Location'
-                );
+                // MODIFIED: Show location type based on package
+                const locationTypeDisplay = bookingData.location_type === 'in-studio' ? 'In-Studio' : 'On-Location';
+                $('#summaryLocationType').text(locationTypeDisplay);
                 
                 if (bookingData.location_type === 'on-location') {
                     let locationText = '';
@@ -1137,17 +1281,26 @@
                     $('#summaryLocationDetails').hide();
                 }
                 
+                // ADDED: Show package location badge in summary
+                const package = $(`.package-radio[value="${selectedPackageId}"]`).data('package');
+                const locationBadge = package.package_location === 'On-Location'
+                    ? '<span class="badge badge-soft-info"><i class="ti ti-map-pin me-1"></i> On-Location Package</span>'
+                    : '<span class="badge badge-soft-primary"><i class="ti ti-building me-1"></i> In-Studio Package</span>';
+                
+                $('#summaryPackage').after(`
+                    <p class="text-muted small mb-1">Package Location:</p>
+                    <p class="fw-medium mb-2" id="summaryPackageLocation">${locationBadge}</p>
+                `);
+                
                 if (window.bookingSummary) {
                     $('#packagePrice').text('₱' + window.bookingSummary.package_price);
                     $('#downPayment').text('₱' + window.bookingSummary.down_payment);
                     $('#remainingBalance').text('₱' + window.bookingSummary.remaining_balance);
                     $('#totalAmount').text('₱' + window.bookingSummary.total_amount);
                     
-                    // ========== ADD THIS: Update down payment label with dynamic percentage ==========
                     const downpaymentPercentage = window.bookingSummary.downpayment_percentage || 30;
                     $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
                     
-                    // Show/hide rows based on payment type
                     if (window.bookingSummary.payment_type === 'full_payment') {
                         $('#downPaymentRow').hide();
                         $('#remainingBalanceRow').hide();
@@ -1155,7 +1308,6 @@
                         $('#downPaymentRow').show();
                         $('#remainingBalanceRow').show();
                     }
-                    // ========== END OF ADDED CODE ==========
                     
                     const galleryHtml = `
                         <p class="text-muted small mb-1 mt-2">Online Gallery:</p>
@@ -1167,9 +1319,9 @@
                         </p>
                     `;
                     
-                    const isStudio = $('#bookingType').val() === 'studio';
                     $('#summaryPackage').after(galleryHtml);
                     
+                    const isStudio = $('#bookingType').val() === 'studio';
                     if (isStudio && window.bookingSummary.photographer_count !== undefined) {
                         const photographerHtml = `
                             <p class="text-muted small mb-1">Assigned Photographers:</p>

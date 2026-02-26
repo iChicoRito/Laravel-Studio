@@ -34,7 +34,17 @@
                                         <div class="card-body p-lg-4 pb-0 text-center">
                                             <h3 class="fw-bold mb-1">{{ $package->package_name }}</h3>
                                             <p class="text-muted mb-0">{{ $package->studio->studio_name ?? 'N/A' }} - {{ $package->category->category_name ?? 'N/A' }}</p>
-
+                                            <div class="mt-2">
+                                                @if($package->package_location == 'In-Studio')
+                                                    <span class="badge badge-soft-primary">
+                                                        <i class="ti ti-building me-1"></i> In-Studio
+                                                    </span>
+                                                @else
+                                                    <span class="badge badge-soft-info">
+                                                        <i class="ti ti-map-pin me-1"></i> On-Location
+                                                    </span>
+                                                @endif
+                                            </div>
                                             <div class="my-4">
                                                 <h1 class="display-6 fw-bold mb-0">PHP {{ number_format($package->package_price, 2) }}</h1>
                                                 <small class="d-block text-muted fs-base">{{ $package->duration }} Hours</small>
@@ -356,6 +366,25 @@
                                     <div class="flex-grow-1 ms-3">
                                         <label class="text-muted small mb-1">Package Price</label>
                                         <p class="mb-0 fw-medium">PHP ${package.package_price ? parseFloat(package.package_price).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '0.00'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-shrink-0">
+                                        <div class="bg-light-primary rounded-circle p-2">
+                                            <i class="ti ti-map-pin fs-20 text-primary"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <label class="text-muted small mb-1">Location Type</label>
+                                        <div class="mb-0">
+                                            ${package.package_location === 'In-Studio' 
+                                                ? '<span class="badge badge-soft-primary px-2 fw-medium"><i class="ti ti-building me-1"></i> In-Studio</span>'
+                                                : '<span class="badge badge-soft-info px-2 fw-medium"><i class="ti ti-map-pin me-1"></i> On-Location</span>'}
+                                        </div>
+                                        <small class="text-muted d-block mt-1">${package.package_location === 'In-Studio' ? 'Session takes place at the studio' : 'Session takes place at client\'s location'}</small>
                                     </div>
                                 </div>
                             </div>

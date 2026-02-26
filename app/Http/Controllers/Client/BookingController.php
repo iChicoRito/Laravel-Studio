@@ -136,6 +136,7 @@ class BookingController extends Controller
                             'coverage_scope' => $package->coverage_scope,
                             'online_gallery' => $package->online_gallery,
                             'photographer_count' => $package->photographer_count ?? 1,
+                            'package_location' => $package->package_location ?? 'In-Studio', // ADDED
                             'gallery_badge' => $package->online_gallery ? 'Yes' : 'No',
                             'gallery_icon' => $package->online_gallery ? 'ti ti-photo' : 'ti ti-photo-off',
                             'gallery_class' => $package->online_gallery ? 'success' : 'secondary',
@@ -154,7 +155,6 @@ class BookingController extends Controller
                     ]);
                 }
                 
-                // ========== MODIFIED: Added online_gallery mapping for freelancer packages ==========
                 $packages = FreelancerPackagesModel::where('user_id', $request->provider_id)
                     ->where('category_id', $request->category_id)
                     ->where('status', 'active')
@@ -169,10 +169,10 @@ class BookingController extends Controller
                             'maximum_edited_photos' => $package->maximum_edited_photos,
                             'package_inclusions' => $package->package_inclusions,
                             'coverage_scope' => $package->coverage_scope,
-                            'online_gallery' => $package->online_gallery ?? false, // ADDED
-                            'gallery_badge' => ($package->online_gallery ?? false) ? 'Yes' : 'No', // ADDED
-                            'gallery_icon' => ($package->online_gallery ?? false) ? 'ti ti-photo' : 'ti ti-photo-off', // ADDED
-                            'gallery_class' => ($package->online_gallery ?? false) ? 'success' : 'secondary', // ADDED
+                            'online_gallery' => $package->online_gallery ?? false,
+                            'gallery_badge' => ($package->online_gallery ?? false) ? 'Yes' : 'No',
+                            'gallery_icon' => ($package->online_gallery ?? false) ? 'ti ti-photo' : 'ti ti-photo-off',
+                            'gallery_class' => ($package->online_gallery ?? false) ? 'success' : 'secondary',
                         ];
                     });
             }
@@ -1274,7 +1274,6 @@ class BookingController extends Controller
             $studio = StudiosModel::find($package->studio_id);
             $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
         } else {
-            // ========== MODIFIED: Get freelancer package ==========
             $package = FreelancerPackagesModel::findOrFail($request->package_id);
             // For freelancer, default to 30%
             $downpaymentPercentage = 30;
@@ -1295,17 +1294,16 @@ class BookingController extends Controller
             'package_price' => number_format($package->package_price, 2),
             'total_amount' => number_format($totalAmount, 2),
             'down_payment' => number_format($downPayment, 2),
-            'downpayment_percentage' => $downpaymentPercentage, // Add this for display
+            'downpayment_percentage' => $downpaymentPercentage,
             'remaining_balance' => number_format($remainingBalance, 2),
             'inclusions' => $package->package_inclusions,
             'duration' => $package->duration,
             'maximum_edited_photos' => $package->maximum_edited_photos,
             'payment_type' => $request->payment_type,
+            'online_gallery' => $package->online_gallery ?? false,
+            'gallery_status' => ($package->online_gallery ?? false) ? 'Included' : 'Not Included',
+            'package_location' => $package->package_location ?? 'In-Studio', // ADDED
         ];
-        
-        // ========== MODIFIED: Added online_gallery for both studio and freelancer ==========
-        $packageData['online_gallery'] = $package->online_gallery ?? false;
-        $packageData['gallery_status'] = ($package->online_gallery ?? false) ? 'Included' : 'Not Included';
         
         if ($request->type === 'studio') {
             $packageData['photographer_count'] = $package->photographer_count ?? 1;

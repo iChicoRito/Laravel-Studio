@@ -73,6 +73,7 @@ class PackagesController extends Controller
                 'package_price' => $request->package_price,
                 'online_gallery' => $request->online_gallery,          // Added
                 'photographer_count' => $request->photographer_count,  // Added
+                'package_location' => $request->package_location,
                 'status' => $request->status,
             ]);
 

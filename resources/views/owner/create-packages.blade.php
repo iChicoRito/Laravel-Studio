@@ -82,6 +82,17 @@
                                     </div>
 
                                     <div class="col-12 mb-3">
+                                        <label class="form-label">Location <span class="text-danger">*</span></label>
+                                        <select class="form-select" name="package_location" id="packageLocation" required>
+                                            <option value="">Select Location</option>
+                                            <option value="In-Studio">In-Studio</option>
+                                            <option value="On-Location">On-Location</option>
+                                        </select>
+                                        <div class="invalid-feedback">Please select a location type.</div>
+                                        <small class="text-muted">Choose whether the photo session takes place at the studio or at an external location.</small>
+                                    </div>
+
+                                    <div class="col-12 mb-3">
                                         <label class="form-label">Coverage Scope</label>
                                         <input type="text" class="form-control" name="coverage_scope" placeholder="Enter coverage scope (e.g., Metro Manila, Luzon)">
                                     </div>
@@ -316,6 +327,40 @@
                     }
                 });
             });
+
+            function toggleCoverageScope() {
+                const selectedLocation = $('#packageLocation').val();
+                const coverageScopeField = $('input[name="coverage_scope"]').closest('.col-12.mb-3');
+                const coverageScopeLabel = coverageScopeField.find('label');
+                const coverageScopeInput = coverageScopeField.find('input');
+                
+                if (selectedLocation === 'On-Location') {
+                    // Show coverage scope field, make it required
+                    coverageScopeField.fadeIn(300);
+                    coverageScopeLabel.html('Coverage Scope <span class="text-danger">*</span>');
+                    coverageScopeInput.prop('required', true);
+                    coverageScopeInput.prop('placeholder', 'Enter coverage scope (e.g., Metro Manila, Luzon)');
+                    coverageScopeField.find('.invalid-feedback').text('Please enter coverage scope for on-location sessions.');
+                } else if (selectedLocation === 'In-Studio') {
+                    // Hide coverage scope field, remove required
+                    coverageScopeField.fadeOut(300);
+                    coverageScopeInput.prop('required', false);
+                    coverageScopeInput.val(''); // Clear the value
+                } else {
+                    // No selection - hide field
+                    coverageScopeField.fadeOut(300);
+                    coverageScopeInput.prop('required', false);
+                    coverageScopeInput.val('');
+                }
+            }
+
+            // Trigger on location change
+            $('#packageLocation').on('change', function() {
+                toggleCoverageScope();
+            });
+
+            // Initial check on page load
+            toggleCoverageScope();
 
             // Bootstrap form validation
             (function() {
