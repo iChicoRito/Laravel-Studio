@@ -37,9 +37,20 @@ class PackageStoreRequest extends FormRequest
             ],
             'package_description' => 'required|string|min:10|max:1000',
             'package_inclusions' => 'required|string|min:1',
-            'duration' => 'required|integer|min:1|max:24',
+            'allow_time_customization' => 'required|boolean',
+            'duration' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:24',
+                function ($attribute, $value, $fail) {
+                    // If time customization is NOT allowed, duration is required
+                    if (!$this->allow_time_customization && empty($value)) {
+                        $fail('Duration is required when time customization is not allowed.');
+                    }
+                },
+            ],
             'maximum_edited_photos' => 'required|integer|min:1|max:1000',
-            // MODIFIED: Conditional validation for coverage_scope
             'coverage_scope' => [
                 'nullable',
                 'string',
@@ -53,7 +64,7 @@ class PackageStoreRequest extends FormRequest
             'package_price' => 'required|numeric|min:0',
             'online_gallery' => 'required|boolean',
             'photographer_count' => 'required|integer|min:0|max:10',
-            'package_location' => 'required|in:In-Studio,On-Location', // ADDED
+            'package_location' => 'required|in:In-Studio,On-Location',
             'status' => 'required|in:active,inactive',
         ];
     }
@@ -75,19 +86,55 @@ class PackageStoreRequest extends FormRequest
             'package_description.required' => 'Package description is required.',
             'package_description.min' => 'Package description must be at least 10 characters.',
             'package_inclusions.required' => 'At least one inclusion is required.',
+            'allow_time_customization.required' => 'Please select if time customization is allowed.',
+            'allow_time_customization.boolean' => 'Invalid selection for time customization.',
+            'duration.integer' => 'Duration must be a valid number.',
             'duration.min' => 'Duration must be at least 1 hour.',
             'duration.max' => 'Duration cannot exceed 24 hours.',
             'maximum_edited_photos.min' => 'Minimum edited photos must be at least 1.',
             'maximum_edited_photos.max' => 'Maximum edited photos cannot exceed 1000.',
             'package_price.min' => 'Package price cannot be negative.',
             'package_price.required' => 'Package price is required.',
-            'online_gallery.required' => 'Please select if online gallery is included.',     // Added
-            'online_gallery.boolean' => 'Invalid selection for online gallery.',             // Added
-            'photographer_count.required' => 'Please specify number of photographers.',      // Added
-            'photographer_count.min' => 'Photographer count cannot be negative.',            // Added
-            'photographer_count.max' => 'Maximum of 10 photographers allowed.',              // Added
-            'package_location.required' => 'Please select a location type.', // ADDED
-            'package_location.in' => 'Invalid location type selected.', // ADDED
+            'online_gallery.required' => 'Please select if online gallery is included.',
+            'online_gallery.boolean' => 'Invalid selection for online gallery.',
+            'photographer_count.required' => 'Please specify number of photographers.',
+            'photographer_count.min' => 'Photographer count cannot be negative.',
+            'photographer_count.max' => 'Maximum of 10 photographers allowed.',
+            'package_location.required' => 'Please select a location type.',
+            'package_location.in' => 'Invalid location type selected.',
         ];
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        $input = $this->all();
+        
+        // Convert string boolean values to actual booleans
+        if ($this->has('allow_time_customization')) {
+            $input['allow_time_customization'] = filter_var($this->allow_time_customization, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        }
+        
+        $this->replace($input);
+    }
+
+    /**
+     * Handle a passed validation attempt.
+     */
+    protected function passedValidation(): void
+    {
+        // ==== Start: Ensure duration is null when time customization is allowed ====
+        $validated = $this->validated();
+        
+        // If time customization is allowed, explicitly set duration to null
+        if (isset($validated['allow_time_customization']) && $validated['allow_time_customization'] === true) {
+            $validated['duration'] = null;
+        }
+        
+        // Replace the request data with the modified validated data
+        $this->replace($validated);
+        // ==== End: Ensure duration is null when time customization is allowed ====
     }
 }

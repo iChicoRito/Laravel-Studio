@@ -43,10 +43,13 @@
                                         <th data-table-sort>Category</th>
                                         <th data-table-sort>Package Name</th>
                                         <th data-table-sort>Location</th>
+                                        <!-- ==== Start: Add Time Customization Column ==== -->
+                                        <th data-table-sort>Time Customization</th>
+                                        <th data-table-sort>Duration</th>
+                                        <!-- ==== End: Add Time Customization Column ==== -->
                                         <th data-table-sort>Price</th>
                                         <th data-table-sort>Online Gallery</th>
                                         <th data-table-sort>Photographers</th>
-                                        <th data-table-sort>Duration</th>
                                         <th data-table-sort>Max Photos</th>
                                         <th data-table-sort data-column="status">Status</th>
                                         <th class="text-center" style="width: 1%;">Actions</th>
@@ -69,6 +72,26 @@
                                                     </span>
                                                 @endif
                                             </td>
+                                            <!-- ==== Start: Time Customization Display ==== -->
+                                            <td>
+                                                @if($package->allow_time_customization)
+                                                    <span class="badge badge-soft-success fs-8 px-1 w-100" title="Clients can customize duration">
+                                                        <i class="ti ti-clock-edit me-1"></i> Flexible
+                                                    </span>
+                                                @else
+                                                    <span class="badge badge-soft-secondary fs-8 px-1 w-100" title="Fixed duration only">
+                                                        <i class="ti ti-clock me-1"></i> Fixed
+                                                    </span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($package->duration)
+                                                    {{ $package->duration }} hours
+                                                @else
+                                                    <span class="text-muted">—</span>
+                                                @endif
+                                            </td>
+                                            <!-- ==== End: Time Customization Display ==== -->
                                             <td>PHP {{ number_format($package->package_price, 2) }}</td>
                                             <td>
                                                 @if($package->online_gallery)
@@ -85,7 +108,6 @@
                                                 <span class="fw-semibold">{{ $package->photographer_count ?? 0 }}</span>
                                                 <small class="text-muted d-block">photographer(s)</small>
                                             </td>
-                                            <td>{{ $package->duration }} hours</td>
                                             <td>{{ $package->maximum_edited_photos }}</td>
                                             <td>
                                                 @if($package->status == 'active')

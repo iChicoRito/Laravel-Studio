@@ -137,6 +137,7 @@ class BookingController extends Controller
                             'online_gallery' => $package->online_gallery,
                             'photographer_count' => $package->photographer_count ?? 1,
                             'package_location' => $package->package_location ?? 'In-Studio', // ADDED
+                            'allow_time_customization' => $package->allow_time_customization,
                             'gallery_badge' => $package->online_gallery ? 'Yes' : 'No',
                             'gallery_icon' => $package->online_gallery ? 'ti ti-photo' : 'ti ti-photo-off',
                             'gallery_class' => $package->online_gallery ? 'success' : 'secondary',
@@ -170,6 +171,7 @@ class BookingController extends Controller
                             'package_inclusions' => $package->package_inclusions,
                             'coverage_scope' => $package->coverage_scope,
                             'online_gallery' => $package->online_gallery ?? false,
+                            'allow_time_customization' => $package->allow_time_customization,
                             'gallery_badge' => ($package->online_gallery ?? false) ? 'Yes' : 'No',
                             'gallery_icon' => ($package->online_gallery ?? false) ? 'ti ti-photo' : 'ti ti-photo-off',
                             'gallery_class' => ($package->online_gallery ?? false) ? 'success' : 'secondary',

@@ -60,22 +60,21 @@ class PackagesController extends Controller
                 ->where('status', 'verified')
                 ->firstOrFail();
 
-            // Create package
-            $package = PackagesModel::create([
-                'studio_id' => $request->studio_id,
-                'category_id' => $request->category_id,
-                'package_name' => $request->package_name,
-                'package_description' => $request->package_description,
-                'package_inclusions' => $request->package_inclusions,
-                'duration' => $request->duration,
-                'maximum_edited_photos' => $request->maximum_edited_photos,
-                'coverage_scope' => $request->coverage_scope ?? '',
-                'package_price' => $request->package_price,
-                'online_gallery' => $request->online_gallery,          // Added
-                'photographer_count' => $request->photographer_count,  // Added
-                'package_location' => $request->package_location,
-                'status' => $request->status,
-            ]);
+            // Get validated data from the request
+            $validatedData = $request->validated();
+
+            // ==== Start: Handle package_inclusions conversion ====
+            // Convert JSON string to array if needed
+            if (isset($validatedData['package_inclusions']) && is_string($validatedData['package_inclusions'])) {
+                $decoded = json_decode($validatedData['package_inclusions'], true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $validatedData['package_inclusions'] = $decoded;
+                }
+            }
+            // ==== End: Handle package_inclusions conversion ====
+
+            // Create package with all validated data
+            $package = PackagesModel::create($validatedData);
 
             return response()->json([
                 'success' => true,

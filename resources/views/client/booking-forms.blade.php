@@ -175,7 +175,7 @@
                                 <h4 class="card-title text-primary mb-3">Event Date & Time</h4>
                                 <div class="mb-3">
                                     <div class="row g-3">
-                                        <div class="col-md-6">
+                                        <div class="col-md-12">
                                             <label class="form-label">Event Date</label>
                                             <div class="input-group">
                                                 <input type="date" class="form-control" id="eventDate" name="event_date"
@@ -195,12 +195,12 @@
                                                 <span id="dateStatusText">Select a date to check availability</span>
                                             </small>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-6">
                                             <label class="form-label">Start Time</label>
                                             <input type="time" class="form-control" id="startTime" name="start_time"
                                                 value="08:00" placeholder="Enter start time" required>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-6">
                                             <label class="form-label">End Time</label>
                                             <input type="time" class="form-control" id="endTime" name="end_time"
                                                 value="18:00" placeholder="Enter end time" required>
@@ -467,6 +467,8 @@
             let selectedPackageId = null;
             let bookingData = null;
             let bookingId = null;
+            let selectedPackageFlexibility = null;
+            let selectedPackageDuration = null;
 
             // ========== Operating Days Enforcement ==========
             const operatingDays = JSON.parse($('#operatingDays').val() || '[]');
@@ -532,6 +534,203 @@
                     });
                 }
             }
+
+            const originalCheckDateHandler = $('#eventDate, #startTime, #endTime').on('change', function() {
+                const selectedDate = $('#eventDate').val();
+                const startTime    = $('#startTime').val();
+                const endTime      = $('#endTime').val();
+
+                if (!selectedDate) {
+                    $('#dateStatusIcon').empty();
+                    $('#dateStatusText').text('Select a date to check availability');
+                    $('#closedDayNote').hide();
+                    $('#submitBookingBtn').prop('disabled', false);
+                    return;
+                }
+
+                // ==== Start: Validate duration for fixed packages ====
+                if (selectedPackageFlexibility === false && selectedPackageDuration > 0 && startTime && endTime) {
+                    // Calculate duration between start and end time
+                    const [startHours, startMinutes] = startTime.split(':').map(Number);
+                    const [endHours, endMinutes] = endTime.split(':').map(Number);
+                    
+                    const startDate = new Date();
+                    startDate.setHours(startHours, startMinutes, 0);
+                    
+                    const endDate = new Date();
+                    endDate.setHours(endHours, endMinutes, 0);
+                    
+                    // If end time is less than start time, assume it's the next day
+                    if (endDate < startDate) {
+                        endDate.setDate(endDate.getDate() + 1);
+                    }
+                    
+                    const durationMs = endDate - startDate;
+                    const durationHours = durationMs / (1000 * 60 * 60);
+                    
+                    // Allow small floating point differences (e.g., 4.99 vs 5.00)
+                    const isExactMatch = Math.abs(durationHours - selectedPackageDuration) < 0.01;
+                    
+                    if (!isExactMatch) {
+                        $('#dateStatusIcon').html('<i class="ti ti-alert-circle text-warning"></i>');
+                        $('#dateStatusText').html(`
+                            <span class="text-warning fw-medium">Duration Mismatch</span>
+                            <span class="text-muted d-block small">This package requires exactly ${selectedPackageDuration} ${selectedPackageDuration > 1 ? 'hours' : 'hour'}.</span>
+                        `);
+                        $('#submitBookingBtn').prop('disabled', true);
+                        return;
+                    }
+                }
+                // ==== End: Validate duration for fixed packages ====
+
+                // Block non-operating days immediately without server call
+                if (!isOperatingDay(selectedDate)) {
+                    const parts   = selectedDate.split('-');
+                    const dayName = new Date(parts[0], parts[1] - 1, parts[2])
+                        .toLocaleDateString('en-US', { weekday: 'long' });
+
+                    $('#dateStatusIcon').html('<i class="ti ti-circle-x text-danger"></i>');
+                    $('#dateStatusText').html(
+                        `<span class="text-danger fw-medium">${dayName} is not an operating day</span>`
+                    );
+                    $('#closedDayNote').text('Operating days: ' + formatOperatingDays()).show();
+                    $('#submitBookingBtn').prop('disabled', true);
+                    return;
+                }
+
+                // Only auto-check if all three fields are filled
+                if (selectedDate && startTime && endTime) {
+                    $('#closedDayNote').hide();
+                    $('#checkDateBtn').trigger('click');
+                } else {
+                    $('#dateStatusIcon').html('<i class="ti ti-info-circle text-info"></i>');
+                    $('#dateStatusText').html('<span class="text-muted">Please fill in start and end time to check availability</span>');
+                }
+            });
+
+            const originalCheckAvailability = $('#checkDateBtn').on('click', function() {
+                const selectedDate = $('#eventDate').val();
+                const startTime    = $('#startTime').val();
+                const endTime      = $('#endTime').val();
+                const type         = $('#bookingType').val();
+                const providerId   = $('#providerId').val();
+
+                if (!selectedDate) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Date Selected',
+                        text: 'Please select a date first.',
+                        confirmButtonColor: '#3475db'
+                    });
+                    return;
+                }
+
+                if (!startTime || !endTime) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Time Required',
+                        text: 'Please enter both start time and end time before checking availability.',
+                        confirmButtonColor: '#3475db'
+                    });
+                    return;
+                }
+
+                // ==== Start: Validate duration for fixed packages before checking availability ====
+                if (selectedPackageFlexibility === false && selectedPackageDuration > 0) {
+                    // Calculate duration between start and end time
+                    const [startHours, startMinutes] = startTime.split(':').map(Number);
+                    const [endHours, endMinutes] = endTime.split(':').map(Number);
+                    
+                    const startDate = new Date();
+                    startDate.setHours(startHours, startMinutes, 0);
+                    
+                    const endDate = new Date();
+                    endDate.setHours(endHours, endMinutes, 0);
+                    
+                    // If end time is less than start time, assume it's the next day
+                    if (endDate < startDate) {
+                        endDate.setDate(endDate.getDate() + 1);
+                    }
+                    
+                    const durationMs = endDate - startDate;
+                    const durationHours = durationMs / (1000 * 60 * 60);
+                    
+                    // Allow small floating point differences (e.g., 4.99 vs 5.00)
+                    const isExactMatch = Math.abs(durationHours - selectedPackageDuration) < 0.01;
+                    
+                    if (!isExactMatch) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Invalid Duration',
+                            html: `This package requires exactly <strong>${selectedPackageDuration} ${selectedPackageDuration > 1 ? 'hours' : 'hour'}</strong>.<br>
+                                Current selection: ${durationHours.toFixed(1)} hours.<br>
+                                <small class="text-muted">Please adjust your start and end times.</small>`,
+                            confirmButtonColor: '#3475db'
+                        });
+                        
+                        $('#dateStatusIcon').html('<i class="ti ti-alert-circle text-warning"></i>');
+                        $('#dateStatusText').html(`
+                            <span class="text-warning fw-medium">Duration Mismatch</span>
+                            <span class="text-muted d-block small">Package requires ${selectedPackageDuration} hours, selected is ${durationHours.toFixed(1)} hours.</span>
+                        `);
+                        $('#submitBookingBtn').prop('disabled', true);
+                        return;
+                    }
+                }
+                // ==== End: Validate duration for fixed packages before checking availability ====
+
+                // Show checking status
+                $('#dateStatusIcon').html('<i class="ti ti-clock text-info"></i>');
+                $('#dateStatusText').text('Checking availability...');
+
+                $.ajax({
+                    url: '{{ route("client.bookings.check-availability") }}',
+                    type: 'POST',
+                    data: {
+                        type:        type,
+                        provider_id: providerId,
+                        date:        selectedDate,
+                        start_time:  startTime,
+                        end_time:    endTime,
+                        _token:      '{{ csrf_token() }}'
+                    },
+                    success: function(response) {
+                        if (response.success && response.available) {
+                            $('#dateStatusIcon').html('<i class="ti ti-circle-check text-success"></i>');
+                            $('#dateStatusText').html(`
+                                <span class="text-success fw-medium">Available</span> 
+                                <span class="text-muted">(${response.existing_bookings}/${response.max_bookings} bookings)</span>
+                            `);
+                            $('#submitBookingBtn').prop('disabled', false);
+                        } else {
+                            $('#dateStatusIcon').html('<i class="ti ti-circle-x text-danger"></i>');
+                            $('#dateStatusText').html(`
+                                <span class="text-danger fw-medium">${response.message || 'Not Available'}</span>
+                            `);
+                            $('#submitBookingBtn').prop('disabled', true);
+
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Not Available',
+                                text: response.message || 'This time slot is not available.',
+                                confirmButtonColor: '#3475db'
+                            });
+                        }
+                    },
+                    error: function(xhr) {
+                        $('#dateStatusIcon').html('<i class="ti ti-alert-circle text-danger"></i>');
+                        $('#dateStatusText').html('<span class="text-danger fw-medium">Error checking availability</span>');
+                        $('#submitBookingBtn').prop('disabled', true);
+
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: 'Failed to check availability. Please try again.',
+                            confirmButtonColor: '#3475db'
+                        });
+                    }
+                });
+            });
 
             // Handle payment option selection
             $('input[name="payment_type"]').on('change', function() {
@@ -646,12 +845,31 @@
                                     ? '<span class="badge badge-soft-info"><i class="ti ti-map-pin me-1"></i> On-Location</span>'
                                     : '<span class="badge badge-soft-primary"><i class="ti ti-building me-1"></i> In-Studio</span>';
                                 
+                                // ==== Start: Display package flexibility status ====
+                                console.log('Package ID:', package.id, 'allow_time_customization:', package.allow_time_customization, 'type:', typeof package.allow_time_customization);
+
+                                let flexibilityBadge = '';
+                                // Check for truthy values in various formats
+                                const isFlexible = package.allow_time_customization == 1 || 
+                                                package.allow_time_customization === true || 
+                                                package.allow_time_customization === '1' || 
+                                                package.allow_time_customization === 'true';
+
+                                if (isFlexible) {
+                                    flexibilityBadge = '<span class="badge badge-soft-success"><i class="ti ti-clock-edit me-1"></i> Flexible Time</span>';
+                                } else {
+                                    flexibilityBadge = '<span class="badge badge-soft-secondary"><i class="ti ti-clock me-1"></i> Fixed Duration</span>';
+                                }
+                                // ==== End: Display package flexibility status ====
+                                
                                 packagesHtml += `
                                     <div class="col-md-6 col-xl-4">
                                         <input type="radio" class="btn-check package-radio" 
                                             name="package" value="${package.id}" 
                                             id="package${package.id}" 
                                             data-package='${packageJson}'
+                                            data-allow-time-customization="${package.allow_time_customization ? '1' : '0'}"
+                                            data-duration="${package.duration || 0}"
                                             style="display: none;">
                                         
                                         <label class="card border h-100 package-card" for="package${package.id}" style="cursor: pointer;">
@@ -667,6 +885,12 @@
                                                 <div class="d-flex align-items-center mb-2">
                                                     ${locationBadge}
                                                 </div>
+                                                
+                                                <!-- ==== Start: Flexibility status display ==== -->
+                                                <div class="d-flex align-items-center mb-2">
+                                                    ${flexibilityBadge}
+                                                </div>
+                                                <!-- ==== End: Flexibility status display ==== -->
                                                 
                                                 <div class="d-flex align-items-center mb-2">
                                                     ${package.online_gallery ? 
@@ -692,12 +916,19 @@
                                                 <div class="col">
                                                     <small class="text-muted d-block mb-2"><i class="ti ti-checklist me-1"></i> Package Includes:</small>
                                                     <ul class="list-unstyled small mb-0">
-                                                        ${package.duration ? `
+                                                        ${!package.allow_time_customization ? `
                                                             <li class="mb-1">
                                                                 <i class="ti ti-clock text-primary me-2"></i> 
-                                                                ${package.duration} ${package.duration > 1 ? 'hours' : 'hour'} coverage
+                                                                ${package.duration ? 
+                                                                    'Fixed Duration: ' + package.duration + (package.duration > 1 ? ' hours' : ' hour') + ' (client must book exactly this duration)' : 
+                                                                    'Fixed Duration Package'}
                                                             </li>
-                                                        ` : ''}
+                                                        ` : `
+                                                            <li class="mb-1">
+                                                                <i class="ti ti-clock-edit text-success me-2"></i> 
+                                                                Flexible Time: Client can choose any duration
+                                                            </li>
+                                                        `}
                                                         
                                                         ${package.maximum_edited_photos ? `
                                                             <li class="mb-1">
@@ -776,6 +1007,14 @@
             // Handle package selection
             $(document).on('change', '.package-radio', function() {
                 selectedPackageId = $(this).val();
+                selectedPackageFlexibility = $(this).data('allow-time-customization') === '1';
+                selectedPackageDuration = parseInt($(this).data('duration')) || 0;
+                
+                console.log('Package selected:', {
+                    id: selectedPackageId,
+                    flexible: selectedPackageFlexibility,
+                    duration: selectedPackageDuration
+                });
                 
                 // SAFELY get package data with error handling
                 let packageData;
@@ -849,6 +1088,10 @@
                 }
                 
                 getBookingSummaryWithPaymentType(packageData, paymentType);
+                
+                // ==== Start: Show/hide duration info based on package flexibility ====
+                updateTimeRestrictionInfo();
+                // ==== End: Show/hide duration info based on package flexibility ====
             });
             
             // Toggle location details based on location type
@@ -1079,6 +1322,74 @@
             
             // ========== Functions ==========
 
+            function updateTimeRestrictionInfo() {
+                const timeHelpText = $('#dateStatusText').parent().find('.time-restriction-info');
+                timeHelpText.remove();
+                
+                if (selectedPackageFlexibility === false && selectedPackageDuration > 0) {
+                    // Fixed duration package - show restriction info
+                    const restrictionHtml = `
+                        <div class="alert alert-info mt-2 mb-0 py-2 time-restriction-info" style="font-size: 0.85rem;">
+                            <i class="ti ti-info-circle me-1"></i>
+                            <strong>Fixed Duration Package:</strong> You must select a time range of exactly 
+                            <strong>${selectedPackageDuration} ${selectedPackageDuration > 1 ? 'hours' : 'hour'}</strong>.
+                            The system will automatically calculate and validate the end time.
+                        </div>
+                    `;
+                    
+                    // Insert after the date status text
+                    $('#dateStatusText').parent().append(restrictionHtml);
+                    
+                    // Add auto-calculation for end time when start time changes
+                    $('#startTime').off('change.calcEndTime').on('change.calcEndTime', function() {
+                        const startTime = $(this).val();
+                        if (startTime && selectedPackageFlexibility === false && selectedPackageDuration > 0) {
+                            calculateEndTime(startTime, selectedPackageDuration);
+                        }
+                    });
+                    
+                    // Trigger calculation if start time already has a value
+                    const currentStartTime = $('#startTime').val();
+                    if (currentStartTime) {
+                        calculateEndTime(currentStartTime, selectedPackageDuration);
+                    }
+                    
+                } else if (selectedPackageFlexibility === true) {
+                    // Flexible package - show info
+                    const flexibleHtml = `
+                        <div class="alert alert-success mt-2 mb-0 py-2 time-restriction-info" style="font-size: 0.85rem;">
+                            <i class="ti ti-clock-edit me-1"></i>
+                            <strong>Flexible Time Package:</strong> You can select any start and end time that works for you.
+                        </div>
+                    `;
+                    
+                    $('#dateStatusText').parent().append(flexibleHtml);
+                    
+                    // Remove auto-calculation
+                    $('#startTime').off('change.calcEndTime');
+                }
+            }
+
+            function calculateEndTime(startTime, durationHours) {
+                if (!startTime || !durationHours) return;
+                
+                const [hours, minutes] = startTime.split(':').map(Number);
+                const startDate = new Date();
+                startDate.setHours(hours, minutes, 0);
+                
+                const endDate = new Date(startDate.getTime() + (durationHours * 60 * 60 * 1000));
+                
+                const endHours = endDate.getHours().toString().padStart(2, '0');
+                const endMinutes = endDate.getMinutes().toString().padStart(2, '0');
+                const calculatedEndTime = `${endHours}:${endMinutes}`;
+                
+                $('#endTime').val(calculatedEndTime);
+                console.log(`Auto-calculated end time: ${calculatedEndTime} for start time ${startTime} + ${durationHours} hours`);
+                
+                // Trigger change event to check availability
+                $('#endTime').trigger('change');
+            }
+
             function getBookingSummaryWithPaymentType(packageData, paymentType) {
                 // ADDED: Better validation
                 if (!packageData) {
@@ -1144,11 +1455,12 @@
                 if (dateStatusText.includes('fully booked') || 
                     dateStatusText.includes('not available') || 
                     dateStatusText.includes('error') ||
-                    dateStatusText.includes('not an operating day')) {
+                    dateStatusText.includes('not an operating day') ||
+                    dateStatusText.includes('duration mismatch')) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Date Not Available',
-                        text: 'Please select an available date before proceeding.',
+                        title: 'Date/Time Not Available',
+                        text: 'Please select an available date and valid time before proceeding.',
                         confirmButtonColor: '#3475db'
                     });
                     return false;
@@ -1173,6 +1485,42 @@
                     });
                     return false;
                 }
+                
+                // ==== Start: Final duration validation for fixed packages ====
+                if (selectedPackageFlexibility === false && selectedPackageDuration > 0) {
+                    const startTime = $('#startTime').val();
+                    const endTime = $('#endTime').val();
+                    
+                    if (startTime && endTime) {
+                        const [startHours, startMinutes] = startTime.split(':').map(Number);
+                        const [endHours, endMinutes] = endTime.split(':').map(Number);
+                        
+                        const startDate = new Date();
+                        startDate.setHours(startHours, startMinutes, 0);
+                        
+                        const endDate = new Date();
+                        endDate.setHours(endHours, endMinutes, 0);
+                        
+                        if (endDate < startDate) {
+                            endDate.setDate(endDate.getDate() + 1);
+                        }
+                        
+                        const durationMs = endDate - startDate;
+                        const durationHours = durationMs / (1000 * 60 * 60);
+                        
+                        if (Math.abs(durationHours - selectedPackageDuration) >= 0.01) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Invalid Duration',
+                                html: `This package requires exactly <strong>${selectedPackageDuration} ${selectedPackageDuration > 1 ? 'hours' : 'hour'}</strong>.<br>
+                                    Current selection: ${durationHours.toFixed(1)} hours.`,
+                                confirmButtonColor: '#3475db'
+                            });
+                            return false;
+                        }
+                    }
+                }
+                // ==== End: Final duration validation for fixed packages ====
                 
                 // MODIFIED: Location type validation - check if it's set (should be auto-populated)
                 const locationType = $('#locationType').val();
@@ -1250,6 +1598,17 @@
                 const packageName = $(`.package-radio[value="${selectedPackageId}"]`).data('package').package_name;
                 $('#summaryPackage').text(packageName);
                 
+                // ==== Start: Show package flexibility in summary ====
+                const flexibilityHtml = selectedPackageFlexibility 
+                    ? '<span class="badge badge-soft-success"><i class="ti ti-clock-edit me-1"></i> Flexible Time Package</span>'
+                    : '<span class="badge badge-soft-secondary"><i class="ti ti-clock me-1"></i> Fixed Duration: ' + selectedPackageDuration + ' hours</span>';
+                
+                $('#summaryPackage').after(`
+                    <p class="text-muted small mb-1">Package Type:</p>
+                    <p class="fw-medium mb-2">${flexibilityHtml}</p>
+                `);
+                // ==== End: Show package flexibility in summary ====
+                
                 const eventDate = new Date(bookingData.event_date);
                 $('#summaryDate').text(eventDate.toLocaleDateString('en-US', { 
                     year: 'numeric', 
@@ -1260,6 +1619,34 @@
                 $('#summaryTime').text(
                     formatTime(bookingData.start_time) + ' - ' + formatTime(bookingData.end_time)
                 );
+                
+                // Show duration info in summary
+                if (!selectedPackageFlexibility && selectedPackageDuration > 0) {
+                    const startTime = bookingData.start_time;
+                    const endTime = bookingData.end_time;
+                    
+                    // Calculate duration
+                    const [startHours, startMinutes] = startTime.split(':').map(Number);
+                    const [endHours, endMinutes] = endTime.split(':').map(Number);
+                    
+                    const startDate = new Date();
+                    startDate.setHours(startHours, startMinutes, 0);
+                    
+                    const endDate = new Date();
+                    endDate.setHours(endHours, endMinutes, 0);
+                    
+                    if (endDate < startDate) {
+                        endDate.setDate(endDate.getDate() + 1);
+                    }
+                    
+                    const durationMs = endDate - startDate;
+                    const durationHours = durationMs / (1000 * 60 * 60);
+                    
+                    $('#summaryTime').after(`
+                        <p class="text-muted small mb-1 mt-2">Duration:</p>
+                        <p class="fw-medium mb-2">${durationHours.toFixed(1)} hours (matches package fixed duration)</p>
+                    `);
+                }
                 
                 // MODIFIED: Show location type based on package
                 const locationTypeDisplay = bookingData.location_type === 'in-studio' ? 'In-Studio' : 'On-Location';

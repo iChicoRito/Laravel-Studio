@@ -143,78 +143,107 @@
                                                 <h4 class="mb-2 text-primary">{{ $packages->first()->category->category_name ?? 'Packages' }}</h4>
                                                 <div class="row g-3">
                                                     @foreach($packages as $package)
-                                                    <div class="col-md-6 col-xl-4">
-                                                        <div class="card border h-100 package-card">
-                                                            <div class="card-body">
-                                                                <!-- Package Name & Price -->
-                                                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                                                    <h6 class="card-title fw-bold mb-0">{{ $package->package_name }}</h6>
-                                                                    <span class="text-success fw-bold">₱{{ number_format($package->package_price, 2) }}</span>
-                                                                </div>
-                                                                
-                                                                <!-- Package Description -->
-                                                                <p class="text-muted small mb-3">{{ $package->package_description ?: 'No description available.' }}</p>
-                                                                
-                                                                @if($type === 'studio')
+                                                        <div class="col-md-6 col-xl-4">
+                                                            <div class="card border h-100 package-card">
+                                                                <div class="card-body">
+                                                                    <!-- Package Name & Price -->
+                                                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                                                        <h6 class="card-title fw-bold mb-0">{{ $package->package_name }}</h6>
+                                                                        <span class="text-success fw-bold">₱{{ number_format($package->package_price, 2) }}</span>
+                                                                    </div>
+                                                                    
+                                                                    <!-- Package Description -->
+                                                                    <p class="text-muted small mb-3">{{ $package->package_description ?: 'No description available.' }}</p>
+                                                                    
+                                                                    <!-- ==== Start: Display package flexibility ==== -->
                                                                     <div class="d-flex align-items-center mb-2">
-                                                                        @if($package->online_gallery)
-                                                                            <span class="p-1 badge badge-soft-success">
-                                                                                <i class="ti ti-photo me-1"></i> Online Gallery: Included
+                                                                        @if($package->allow_time_customization)
+                                                                            <span class="badge badge-soft-success">
+                                                                                <i class="ti ti-clock-edit me-1"></i> Flexible Time
                                                                             </span>
                                                                         @else
-                                                                            <span class="p-1 badge badge-soft-warning">
-                                                                                <i class="ti ti-photo-off me-1"></i> Online Gallery: Not Included
+                                                                            @php
+                                                                                $durationDisplay = $package->duration ? $package->duration . ($package->duration > 1 ? ' hours' : ' hour') : 'Fixed Duration';
+                                                                            @endphp
+                                                                            <span class="badge badge-soft-secondary">
+                                                                                <i class="ti ti-clock me-1"></i> {{ $durationDisplay }}
                                                                             </span>
                                                                         @endif
                                                                     </div>
-                                                                @endif
-                                                                
-                                                                @if($type === 'studio')
-                                                                    <div class="d-flex align-items-center mb-3">
-                                                                        <span class="p-1 badge badge-soft-primary">
-                                                                            <i class="ti ti-users me-1"></i> 
-                                                                            Photographers: {{ $package->photographer_count ?? 1 }} 
-                                                                            @if(($package->photographer_count ?? 1) > 1) photographers @else photographer @endif
-                                                                        </span>
-                                                                    </div>
-                                                                @endif
-                                                                
-                                                                <!-- Package Features -->
-                                                                <div class="col">
-                                                                    <small class="text-muted d-block mb-2"><i class="ti ti-checklist me-1"></i> Package Includes:</small>
-                                                                    <ul class="list-unstyled small mb-0">
-                                                                        @if($package->duration)
-                                                                            <li class="mb-1">
-                                                                                <i class="ti ti-clock text-primary me-2"></i> 
-                                                                                {{ $package->duration }} {{ $package->duration > 1 ? 'hours' : 'hour' }} coverage
-                                                                            </li>
-                                                                        @endif
-                                                                        @if($package->maximum_edited_photos)
-                                                                            <li class="mb-1">
-                                                                                <i class="ti ti-camera text-primary me-2"></i> 
-                                                                                {{ $package->maximum_edited_photos }} edited photos
-                                                                            </li>
-                                                                        @endif
-                                                                        @if($package->package_inclusions && is_array($package->package_inclusions))
-                                                                            @foreach($package->package_inclusions as $inclusion)
+                                                                    <!-- ==== End: Display package flexibility ==== -->
+                                                                    
+                                                                    @if($type === 'studio')
+                                                                        <div class="d-flex align-items-center mb-2">
+                                                                            @if($package->online_gallery)
+                                                                                <span class="p-1 badge badge-soft-success">
+                                                                                    <i class="ti ti-photo me-1"></i> Online Gallery: Included
+                                                                                </span>
+                                                                            @else
+                                                                                <span class="p-1 badge badge-soft-warning">
+                                                                                    <i class="ti ti-photo-off me-1"></i> Online Gallery: Not Included
+                                                                                </span>
+                                                                            @endif
+                                                                        </div>
+                                                                    @endif
+                                                                    
+                                                                    @if($type === 'studio')
+                                                                        <div class="d-flex align-items-center mb-3">
+                                                                            <span class="p-1 badge badge-soft-primary">
+                                                                                <i class="ti ti-users me-1"></i> 
+                                                                                Photographers: {{ $package->photographer_count ?? 1 }} 
+                                                                                @if(($package->photographer_count ?? 1) > 1) photographers @else photographer @endif
+                                                                            </span>
+                                                                        </div>
+                                                                    @endif
+                                                                    
+                                                                    <!-- Package Features -->
+                                                                    <div class="col">
+                                                                        <small class="text-muted d-block mb-2"><i class="ti ti-checklist me-1"></i> Package Includes:</small>
+                                                                        <ul class="list-unstyled small mb-0">
+                                                                            @if(!$package->allow_time_customization)
                                                                                 <li class="mb-1">
-                                                                                    <i class="ti ti-check text-success me-2"></i> 
-                                                                                    {{ $inclusion }}
+                                                                                    <i class="ti ti-clock text-primary me-2"></i> 
+                                                                                    @if($package->duration)
+                                                                                        Fixed Duration: {{ $package->duration }} {{ $package->duration > 1 ? 'hours' : 'hour' }}
+                                                                                    @else
+                                                                                        Fixed Duration Package
+                                                                                    @endif
                                                                                 </li>
-                                                                            @endforeach
-                                                                        @endif
-                                                                        @if($package->coverage_scope)
-                                                                            <li class="mb-1">
-                                                                                <i class="ti ti-map-pin text-primary me-2"></i> 
-                                                                                Coverage: {{ $package->coverage_scope }}
-                                                                            </li>
-                                                                        @endif
-                                                                    </ul>
+                                                                            @else
+                                                                                <li class="mb-1">
+                                                                                    <i class="ti ti-clock-edit text-success me-2"></i> 
+                                                                                    Flexible Time: Client can choose any duration
+                                                                                </li>
+                                                                            @endif
+                                                                            
+                                                                            @if($package->maximum_edited_photos)
+                                                                                <li class="mb-1">
+                                                                                    <i class="ti ti-camera text-primary me-2"></i> 
+                                                                                    {{ $package->maximum_edited_photos }} edited photos
+                                                                                </li>
+                                                                            @endif
+                                                                            
+                                                                            @if($package->package_inclusions && is_array($package->package_inclusions))
+                                                                                @foreach($package->package_inclusions as $inclusion)
+                                                                                    <li class="mb-1">
+                                                                                        <i class="ti ti-check text-success me-2"></i> 
+                                                                                        {{ $inclusion }}
+                                                                                    </li>
+                                                                                @endforeach
+                                                                            @endif
+                                                                            
+                                                                            @if($package->coverage_scope)
+                                                                                <li class="mb-1">
+                                                                                    <i class="ti ti-map-pin text-primary me-2"></i> 
+                                                                                    Coverage: {{ $package->coverage_scope }}
+                                                                                </li>
+                                                                            @endif
+                                                                        </ul>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    @endforeach
+                                                        @endforeach
                                                 </div>
                                             </div>
                                             @endforeach

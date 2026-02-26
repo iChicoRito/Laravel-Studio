@@ -45,9 +45,28 @@
                                                     </span>
                                                 @endif
                                             </div>
+                                            <!-- ==== Start: Time Customization Badge ==== -->
+                                            <div class="mt-1">
+                                                @if($package->allow_time_customization)
+                                                    <span class="badge badge-soft-success" title="Clients can customize duration">
+                                                        <i class="ti ti-clock-edit me-1"></i> Flexible Duration
+                                                    </span>
+                                                @else
+                                                    <span class="badge badge-soft-secondary" title="Fixed duration only">
+                                                        <i class="ti ti-clock me-1"></i> Fixed Duration: {{ $package->duration }} hours
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            <!-- ==== End: Time Customization Badge ==== -->
                                             <div class="my-4">
                                                 <h1 class="display-6 fw-bold mb-0">PHP {{ number_format($package->package_price, 2) }}</h1>
-                                                <small class="d-block text-muted fs-base">{{ $package->duration }} Hours</small>
+                                                <!-- ==== Start: Update duration display ==== -->
+                                                @if(!$package->allow_time_customization && $package->duration)
+                                                    <small class="d-block text-muted fs-base">{{ $package->duration }} Hours (Fixed)</small>
+                                                @elseif($package->allow_time_customization)
+                                                    <small class="d-block text-muted fs-base">Flexible Duration</small>
+                                                @endif
+                                                <!-- ==== End: Update duration display ==== -->
                                                 <small class="d-block text-muted">{{ $package->maximum_edited_photos }} Edited Photos</small>
                                                 <div class="d-flex justify-content-center gap-3 mt-2">
                                                     <div class="text-center">
@@ -65,7 +84,7 @@
                                                 </div>
                                             </div>
 
-                                            {{-- INCLUSIONS ON CARD - FIXED: Display first 3 inclusions --}}
+                                            {{-- INCLUSIONS ON CARD --}}
                                             <div class="text-start mb-3">
                                                 <small class="text-muted fw-semibold d-block mb-2">INCLUSIONS:</small>
                                                 <ul class="list-unstyled fs-sm mb-0">
@@ -217,23 +236,21 @@
                 }
             });
 
-            // Function to generate modal HTML from package data - FIXED inclusions display
+            // Function to generate modal HTML from package data - UPDATED with time customization
             function generatePackageModalHtml(package) {
                 // Debug: Log the package data to see what we're getting
                 console.log('Package data:', package);
                 
-                // SAFELY handle package_inclusions - check if it exists and is an array
+                // Safely handle package_inclusions
                 let inclusions = [];
                 if (package.package_inclusions) {
                     if (Array.isArray(package.package_inclusions)) {
                         inclusions = package.package_inclusions;
                     } else if (typeof package.package_inclusions === 'string') {
-                        // Try to parse if it's a JSON string
                         try {
                             const parsed = JSON.parse(package.package_inclusions);
                             inclusions = Array.isArray(parsed) ? parsed : [package.package_inclusions];
                         } catch (e) {
-                            // If it's a comma-separated string, split it
                             inclusions = package.package_inclusions.split(',').map(item => item.trim());
                         }
                     } else {
@@ -241,7 +258,7 @@
                     }
                 }
                 
-                // Format inclusions as HTML list - FIXED: Always show at least a message
+                // Format inclusions as HTML list
                 let inclusionsHtml = '';
                 if (inclusions.length > 0) {
                     inclusions.forEach(function(inclusion) {
@@ -289,6 +306,12 @@
                 let galleryBadge = package.online_gallery 
                     ? '<span class="badge badge-soft-success px-2 fw-medium"><i class="ti ti-check me-1"></i> Included</span>'
                     : '<span class="badge badge-soft-secondary px-2 fw-medium"><i class="ti ti-x me-1"></i> Not Included</span>';
+                
+                // ==== Start: Format time customization badge ====
+                let timeCustomizationBadge = package.allow_time_customization 
+                    ? '<span class="badge badge-soft-success px-2 fw-medium"><i class="ti ti-clock-edit me-1"></i> Flexible (Client can choose)</span>'
+                    : '<span class="badge badge-soft-secondary px-2 fw-medium"><i class="ti ti-clock me-1"></i> Fixed Duration: ' + (package.duration || 0) + ' hours</span>';
+                // ==== End: Format time customization badge ====
                 
                 // Format created date
                 let createdDate = 'N/A';
@@ -389,6 +412,29 @@
                                 </div>
                             </div>
 
+                            <!-- ==== Start: Time Customization Display in Modal ==== -->
+                            <div class="col-12 col-md-6">
+                                <div class="d-flex align-items-start">
+                                    <div class="flex-shrink-0">
+                                        <div class="bg-light-primary rounded-circle p-2">
+                                            <i class="ti ti-clock fs-20 text-primary"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <label class="text-muted small mb-1">Time Customization</label>
+                                        <div class="mb-0 fw-medium">
+                                            ${timeCustomizationBadge}
+                                        </div>
+                                        <small class="text-muted d-block mt-1">
+                                            ${package.allow_time_customization 
+                                                ? 'Clients can choose their preferred duration during booking' 
+                                                : 'Fixed duration package - clients must book for exactly ' + (package.duration || 0) + ' hours'}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- ==== End: Time Customization Display in Modal ==== -->
+
                             <div class="col-12 col-md-6">
                                 <div class="d-flex align-items-start">
                                     <div class="flex-shrink-0">
@@ -417,20 +463,6 @@
                                         <label class="text-muted small mb-1">Assigned Photographers</label>
                                         <p class="mb-0 fw-medium">${package.photographer_count || 0} Photographer(s)</p>
                                         <small class="text-muted d-block mt-1">Studio photographers assigned to this package</small>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-12 col-md-6">
-                                <div class="d-flex align-items-start">
-                                    <div class="flex-shrink-0">
-                                        <div class="bg-light-primary rounded-circle p-2">
-                                            <i class="ti ti-clock fs-20 text-primary"></i>
-                                        </div>
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <label class="text-muted small mb-1">Duration</label>
-                                        <p class="mb-0 fw-medium">${package.duration || 0} Hours</p>
                                     </div>
                                 </div>
                             </div>
@@ -509,7 +541,7 @@
                 </div>`;
             }
 
-            // View Package Details - UPDATED with better error handling
+            // View Package Details
             $(document).on('click', '.view-package-btn', function() {
                 const packageId = $(this).data('package-id');
                 const modal = new bootstrap.Modal(document.getElementById('viewPackageModal'));
@@ -529,7 +561,7 @@
                     url: url,
                     type: 'GET',
                     dataType: 'json',
-                    timeout: 10000, // 10 second timeout
+                    timeout: 10000,
                     success: function(response) {
                         if (response.success && response.data) {
                             // Hide loading spinner

@@ -34,6 +34,9 @@ class PackagesModel extends Model
         'online_gallery',
         'photographer_count',
         'package_location',
+        // ==== Start: Add allow_time_customization to fillable ====
+        'allow_time_customization',
+        // ==== End: Add allow_time_customization to fillable ====
         'status',
     ];
 
@@ -48,6 +51,10 @@ class PackagesModel extends Model
         'package_price' => 'decimal:2',
         'online_gallery' => 'boolean',
         'photographer_count' => 'integer',
+        // ==== Start: Allow duration to be nullable ====
+        'duration' => 'integer',
+        // ==== End: Allow duration to be nullable ====
+        'allow_time_customization' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -82,7 +89,10 @@ class PackagesModel extends Model
             'package_description' => 'required|string|min:10|max:1000',
             'package_inclusions' => 'required|array|min:1',
             'package_inclusions.*' => 'required|string|max:255',
-            'duration' => 'required|integer|min:1|max:24',
+            // ==== Start: Update validation rules for duration based on allow_time_customization ====
+            'duration' => 'nullable|integer|min:1|max:24',
+            'allow_time_customization' => 'required|boolean',
+            // ==== End: Update validation rules for duration based on allow_time_customization ====
             'maximum_edited_photos' => 'required|integer|min:1|max:1000',
             'coverage_scope' => 'nullable|string|max:500',
             'package_price' => 'required|numeric|min:0',
@@ -106,8 +116,13 @@ class PackagesModel extends Model
             'package_name.unique' => 'A package with this name already exists for this studio.',
             'package_inclusions.required' => 'At least one inclusion is required.',
             'package_inclusions.*.required' => 'Each inclusion item is required.',
+            // ==== Start: Update validation messages for duration ====
+            'duration.integer' => 'Duration must be a valid number.',
             'duration.min' => 'Duration must be at least 1 hour.',
             'duration.max' => 'Duration cannot exceed 24 hours.',
+            'allow_time_customization.required' => 'Please select if time customization is allowed.',
+            'allow_time_customization.boolean' => 'Invalid value for time customization.',
+            // ==== End: Update validation messages for duration ====
             'maximum_edited_photos.min' => 'Minimum edited photos must be at least 1.',
             'maximum_edited_photos.max' => 'Maximum edited photos cannot exceed 1000.',
             'package_price.min' => 'Package price cannot be negative.',
