@@ -34,6 +34,14 @@ class PackageStoreRequest extends FormRequest
                 // If JSON decode fails, keep as is
             }
         }
+
+        // ==== Start: Handle allow_time_customization boolean conversion ==== //
+        if ($this->has('allow_time_customization')) {
+            $this->merge([
+                'allow_time_customization' => filter_var($this->allow_time_customization, FILTER_VALIDATE_BOOLEAN)
+            ]);
+        }
+        // ==== End: Handle allow_time_customization boolean conversion ==== //
     }
 
     /**
@@ -43,18 +51,42 @@ class PackageStoreRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        // ==== Start: Add conditional duration validation ==== //
+        $rules = [
             'category_id' => 'required|exists:tbl_categories,id',
             'package_name' => 'required|string|max:255',
             'package_description' => 'required|string',
             'package_inclusions' => 'required|array|min:1',
             'package_inclusions.*' => 'required|string|max:255',
-            'duration' => 'required|integer|min:1|max:24',
+            'allow_time_customization' => 'required|boolean',
+            'duration' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:24',
+                function ($attribute, $value, $fail) {
+                    $allowCustomization = $this->input('allow_time_customization');
+                    
+                    // If time customization is NOT allowed, duration is required
+                    if (!$allowCustomization && empty($value)) {
+                        $fail('Duration is required when time customization is not allowed.');
+                    }
+                    
+                    // If time customization is allowed, duration should be null
+                    if ($allowCustomization && !empty($value)) {
+                        $fail('Duration should not be provided when time customization is allowed.');
+                    }
+                },
+            ],
             'maximum_edited_photos' => 'required|integer|min:1|max:1000',
             'coverage_scope' => 'nullable|string|max:255',
             'package_price' => 'required|numeric|min:0',
+            'online_gallery' => 'required|boolean',
             'status' => 'required|in:active,inactive',
         ];
+        // ==== End: Add conditional duration validation ==== //
+
+        return $rules;
     }
 
     /**
@@ -72,6 +104,10 @@ class PackageStoreRequest extends FormRequest
             'package_inclusions.required' => 'At least one inclusion is required.',
             'package_inclusions.min' => 'At least one inclusion is required.',
             'package_inclusions.*.required' => 'Each inclusion field is required.',
+            // ==== Start: Add time customization messages ==== //
+            'allow_time_customization.required' => 'Please select if time customization is allowed.',
+            'allow_time_customization.boolean' => 'Invalid selection for time customization.',
+            // ==== End: Add time customization messages ==== //
             'duration.required' => 'Duration is required.',
             'duration.min' => 'Duration must be at least 1 hour.',
             'duration.max' => 'Duration cannot exceed 24 hours.',
@@ -80,6 +116,7 @@ class PackageStoreRequest extends FormRequest
             'maximum_edited_photos.max' => 'Maximum of 1000 photos allowed.',
             'package_price.required' => 'Package price is required.',
             'package_price.min' => 'Package price must be at least 0.',
+            'online_gallery.required' => 'Please select if online gallery is included.',
             'status.required' => 'Status is required.',
             'status.in' => 'Status must be either active or inactive.',
         ];

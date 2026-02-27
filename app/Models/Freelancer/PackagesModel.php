@@ -25,6 +25,7 @@ class PackagesModel extends Model
         'package_name',
         'package_description',
         'package_inclusions',
+        'allow_time_customization',
         'duration',
         'maximum_edited_photos',
         'coverage_scope',
@@ -42,6 +43,7 @@ class PackagesModel extends Model
         'package_inclusions' => 'array',
         'package_price' => 'decimal:2',
         'online_gallery' => 'boolean', // ADDED
+        'allow_time_customization' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -84,4 +86,44 @@ class PackagesModel extends Model
         'online_gallery' => 'boolean', // ADDED
         'status' => 'required|in:active,inactive',
     ];
+
+    /**
+     * Get time customization label
+     */
+    public function getTimeCustomizationLabelAttribute(): string
+    {
+        return $this->allow_time_customization ? 'Flexible' : 'Fixed';
+    }
+
+    /**
+     * Get duration display text
+     */
+    public function getDurationDisplayAttribute(): string
+    {
+        if ($this->allow_time_customization) {
+            return 'Client can choose';
+        }
+        
+        return $this->duration ? $this->duration . ' hours' : 'Not specified';
+    }
+
+    /**
+     * Get time customization badge class
+     */
+    public function getTimeCustomizationBadgeAttribute(): string
+    {
+        return $this->allow_time_customization 
+            ? 'badge-soft-success' 
+            : 'badge-soft-secondary';
+    }
+
+    /**
+     * Get time customization icon
+     */
+    public function getTimeCustomizationIconAttribute(): string
+    {
+        return $this->allow_time_customization 
+            ? 'ti ti-clock-edit' 
+            : 'ti ti-clock';
+    }
 }

@@ -58,11 +58,36 @@
                                         </div>
                                     </div>
 
+                                    <!-- ==== Start: Time Customization Control ==== -->
                                     <div class="col-12 mb-3">
-                                        <label class="form-label">Duration (hours)</label>
-                                        <input type="number" class="form-control" name="duration" placeholder="Enter duration in hours" min="1" max="24" required>
-                                        <div class="invalid-feedback">Please enter valid duration (1-24 hours).</div>
+                                        <label class="form-label d-block">Allow Time Customization</label>
+                                        <div class="btn-group w-100 mb-1" role="group" aria-label="Time Customization Toggle">
+                                            <input type="radio" class="btn-check" name="allow_time_customization" id="timeCustomizationYes" value="1" autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="timeCustomizationYes">
+                                                <i class="ti ti-clock-edit me-1"></i> Yes, clients can customize duration
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="allow_time_customization" id="timeCustomizationNo" value="0" checked autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="timeCustomizationNo">
+                                                <i class="ti ti-clock me-1"></i> No, fixed duration only
+                                            </label>
+                                        </div>
+                                        <div class="invalid-feedback">Please select if time customization is allowed.</div>
+                                        <small class="text-muted">
+                                            <i class="ti ti-info-circle me-1"></i>
+                                            When enabled, clients can choose their own duration during booking. When disabled, you must specify a fixed duration.
+                                        </small>
                                     </div>
+                                    <!-- ==== End: Time Customization Control ==== -->
+
+                                    <!-- ==== Start: Duration Field with Conditional Visibility ==== -->
+                                    <div class="col-12 mb-3" id="durationField">
+                                        <label class="form-label">Duration (hours) <span class="text-danger" id="durationRequired">*</span></label>
+                                        <input type="number" class="form-control" name="duration" id="durationInput" placeholder="Enter duration in hours" min="1" max="24">
+                                        <div class="invalid-feedback">Please enter valid duration (1-24 hours).</div>
+                                        <small class="text-muted" id="durationHelpText">Fixed duration for this package.</small>
+                                    </div>
+                                    <!-- ==== End: Duration Field with Conditional Visibility ==== -->
 
                                     <div class="col-12 mb-3">
                                         <label class="form-label">Maximum Edited Photos</label>
@@ -187,6 +212,42 @@
                     $('.remove-inclusion-btn').prop('disabled', true);
                 }
             });
+
+            // ==== Start: Time Customization Toggle Logic ====
+            function toggleDurationField() {
+                const allowCustomization = $('input[name="allow_time_customization"]:checked').val();
+                const durationField = $('#durationField');
+                const durationInput = $('#durationInput');
+                const durationRequired = $('#durationRequired');
+                const durationHelpText = $('#durationHelpText');
+                
+                if (allowCustomization === '1') {
+                    // Time customization is ALLOWED - hide duration field, remove required
+                    durationField.fadeOut(300);
+                    durationInput.prop('required', false);
+                    durationInput.val(''); // Clear any existing value
+                    durationRequired.hide();
+                    durationHelpText.text('Clients can choose their preferred duration during booking.');
+                } else {
+                    // Time customization is NOT allowed - show duration field, make it required
+                    durationField.fadeIn(300);
+                    durationInput.prop('required', true);
+                    durationRequired.show();
+                    durationHelpText.text('Fixed duration for this package.');
+                }
+            }
+
+            // Trigger on time customization radio change
+            $('input[name="allow_time_customization"]').on('change', function() {
+                toggleDurationField();
+                
+                // Trigger Bootstrap validation update if needed
+                durationInput.removeClass('is-invalid');
+            });
+
+            // Initial check on page load (default is "No" - value 0, so duration should be visible)
+            toggleDurationField();
+            // ==== End: Time Customization Toggle Logic ====
             
             // Form submission with AJAX
             $('#createPackageForm').on('submit', function(e) {
@@ -197,6 +258,9 @@
                     category_id: $('#categorySelect').val(),
                     package_name: $('input[name="package_name"]').val(),
                     package_description: $('textarea[name="package_description"]').val(),
+                    // ==== Start: Include allow_time_customization ==== //
+                    allow_time_customization: $('input[name="allow_time_customization"]:checked').val(),
+                    // ==== End: Include allow_time_customization ==== //
                     duration: $('input[name="duration"]').val(),
                     maximum_edited_photos: $('input[name="maximum_edited_photos"]').val(),
                     coverage_scope: $('input[name="coverage_scope"]').val(),
@@ -206,8 +270,8 @@
                     package_inclusions: []
                 };
                 
-                // Debug: Log the online gallery value
-                console.log('Online gallery value:', formData.online_gallery);
+                // Debug: Log the values
+                console.log('Form data:', formData);
                 
                 // Collect inclusions as array
                 $('input[name="package_inclusions[]"]').each(function() {
@@ -226,6 +290,33 @@
                     });
                     return;
                 }
+
+                // ==== Start: Validate duration based on time customization ====
+                const allowCustomization = formData.allow_time_customization;
+                
+                // If time customization is NOT allowed, duration is required
+                if (allowCustomization === '0' && (!formData.duration || formData.duration === '')) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Validation Error',
+                        text: 'Duration is required when time customization is not allowed.',
+                        confirmButtonColor: '#DC3545'
+                    });
+                    
+                    // Highlight the duration field
+                    $('#durationInput').addClass('is-invalid');
+                    
+                    // Re-enable submit button
+                    const submitBtn = $(this).find('button[type="submit"]');
+                    submitBtn.prop('disabled', false).html('Create Package');
+                    return false;
+                }
+                
+                // If time customization is allowed, ensure duration is not sent
+                if (allowCustomization === '1') {
+                    delete formData.duration;
+                }
+                // ==== End: Validate duration based on time customization ====
                 
                 // Show loading state
                 const submitBtn = $(this).find('button[type="submit"]');

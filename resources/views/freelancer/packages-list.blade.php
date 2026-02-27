@@ -47,7 +47,17 @@
 
                                                 <div class="my-4">
                                                     <h1 class="display-6 fw-bold mb-0">PHP {{ number_format($package->package_price, 2) }}</h1>
-                                                    <small class="d-block text-muted fs-base">{{ $package->duration }} Hours</small>
+                                                    
+                                                    <!-- ==== Start: Time Customization in Price Card ==== -->
+                                                    @if($package->allow_time_customization)
+                                                        <small class="d-block text-muted fs-base">
+                                                            <i class="ti ti-clock-edit me-1"></i> Flexible duration
+                                                        </small>
+                                                    @else
+                                                        <small class="d-block text-muted fs-base">{{ $package->duration }} Hours</small>
+                                                    @endif
+                                                    <!-- ==== End: Time Customization in Price Card ==== -->
+                                                    
                                                     <small class="d-block text-muted">{{ $package->maximum_edited_photos }} Edited Photos</small>
                                                     <div class="d-flex justify-content-center mt-2">
                                                         <span class="badge {{ $package->online_gallery ? 'badge-soft-success' : 'badge-soft-secondary' }} px-2 py-1">
@@ -55,9 +65,19 @@
                                                             Online Gallery: {{ $package->online_gallery ? 'Yes' : 'No' }}
                                                         </span>
                                                     </div>
+
+                                                    <!-- ==== Start: Add Time Customization Badge ==== -->
+                                                    @if($package->allow_time_customization)
+                                                        <div class="d-flex justify-content-center mt-2">
+                                                            <span class="badge badge-soft-success px-2 py-1">
+                                                                <i class="ti ti-clock-edit me-1"></i> Flexible Duration
+                                                            </span>
+                                                        </div>
+                                                    @endif
+                                                    <!-- ==== End: Add Time Customization Badge ==== -->
                                                 </div>
 
-                                                {{-- INCLUSIONS ON CARD - FIXED: Display first 3 inclusions --}}
+                                                {{-- INCLUSIONS ON CARD - Display first 3 inclusions --}}
                                                 <div class="text-start mb-3">
                                                     <small class="text-muted fw-semibold d-block mb-2">INCLUSIONS:</small>
                                                     <ul class="list-unstyled fs-sm mb-0">
@@ -277,7 +297,7 @@
             }
 
             /**
-             * Render package details in modal - FIXED inclusions display
+             * Render package details in modal
              */
             function renderPackageDetails(package) {
                 // Debug: Log the package data
@@ -286,18 +306,16 @@
                 // Set modal title
                 $('#viewPackageModalLabel').text((package.package_name || 'Package') + ' Details');
                 
-                // SAFELY handle package_inclusions
+                // Safely handle package_inclusions
                 let inclusions = [];
                 if (package.package_inclusions) {
                     if (Array.isArray(package.package_inclusions)) {
                         inclusions = package.package_inclusions;
                     } else if (typeof package.package_inclusions === 'string') {
-                        // Try to parse if it's a JSON string
                         try {
                             const parsed = JSON.parse(package.package_inclusions);
                             inclusions = Array.isArray(parsed) ? parsed : [package.package_inclusions];
                         } catch (e) {
-                            // If it's a comma-separated string, split it
                             inclusions = package.package_inclusions.split(',').map(item => item.trim());
                         }
                     } else {
@@ -409,6 +427,7 @@
                                     </div>
                                 </div>
 
+                                <!-- ==== Start: Time Customization Display in Modal ==== -->
                                 <div class="col-12 col-md-6">
                                     <div class="d-flex align-items-start">
                                         <div class="flex-shrink-0">
@@ -417,11 +436,39 @@
                                             </div>
                                         </div>
                                         <div class="flex-grow-1 ms-3">
-                                            <label class="text-muted small mb-1">Duration</label>
-                                            <p class="mb-0 fw-medium">${package.duration || 0} Hours</p>
+                                            <label class="text-muted small mb-1">Time Customization</label>
+                                            <div class="mb-0 fw-medium">
+                                                ${package.allow_time_customization 
+                                                    ? '<span class="badge badge-soft-success px-2 fw-medium"><i class="ti ti-clock-edit me-1"></i> Flexible Duration</span>' 
+                                                    : '<span class="badge badge-soft-secondary px-2 fw-medium"><i class="ti ti-clock me-1"></i> Fixed Duration</span>'}
+                                            </div>
+                                            <small class="text-muted d-block mt-1">
+                                                ${package.allow_time_customization 
+                                                    ? 'Clients can choose their preferred duration' 
+                                                    : 'Fixed duration package'}
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <div class="flex-shrink-0">
+                                            <div class="bg-light-primary rounded-circle p-2">
+                                                <i class="ti ti-camera fs-20 text-primary"></i>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1 ms-3">
+                                            <label class="text-muted small mb-1">Duration</label>
+                                            <p class="mb-0 fw-medium">
+                                                ${package.allow_time_customization 
+                                                    ? '<span class="text-muted">Client can choose</span>' 
+                                                    : (package.duration || 0) + ' Hours'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- ==== End: Time Customization Display in Modal ==== -->
 
                                 <div class="col-12 col-md-6">
                                     <div class="d-flex align-items-start">

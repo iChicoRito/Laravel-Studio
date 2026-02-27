@@ -8,6 +8,7 @@ use App\Models\Freelancer\PackagesModel;
 use App\Models\Admin\CategoriesModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PackagesController extends Controller
 {
@@ -59,20 +60,44 @@ class PackagesController extends Controller
             // Add user_id to the validated data
             $validated['user_id'] = Auth::id();
             
-            // FIXED: Ensure online_gallery is properly handled as boolean
-            // Check if online_gallery exists in request and convert to boolean
+            // Ensure online_gallery is properly handled as boolean
             if ($request->has('online_gallery')) {
-                // Convert string '1' or '0' to boolean
                 $validated['online_gallery'] = filter_var($request->online_gallery, FILTER_VALIDATE_BOOLEAN);
             } else {
                 $validated['online_gallery'] = false;
             }
+
+            // ==== Start: Fix duration null issue ==== //
+            // Ensure allow_time_customization is properly set as boolean
+            $validated['allow_time_customization'] = filter_var($request->allow_time_customization, FILTER_VALIDATE_BOOLEAN);
             
-            // Debug log (remove in production)
-            \Log::info('Online gallery value:', [
-                'raw' => $request->online_gallery,
-                'processed' => $validated['online_gallery']
+            // Log the values for debugging (remove in production)
+            \Log::info('Package creation - Before handling:', [
+                'allow_time_customization' => $validated['allow_time_customization'],
+                'duration_input' => $request->duration,
+                'has_duration' => $request->has('duration')
             ]);
+            
+            // CRITICAL FIX: Handle duration based on time customization
+            if ($validated['allow_time_customization']) {
+                // If time customization is allowed, explicitly remove duration from the data
+                // This prevents the NULL value from being sent to the database
+                unset($validated['duration']);
+            } else {
+                // If time customization is NOT allowed, ensure duration is present and valid
+                if (!$request->has('duration') || empty($request->duration)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Duration is required when time customization is not allowed.'
+                    ], 422);
+                }
+                // Keep the duration value as is
+                $validated['duration'] = $request->duration;
+            }
+            
+            // Log final data before insert (remove in production)
+            \Log::info('Package creation - Final data:', $validated);
+            // ==== End: Fix duration null issue ==== //
             
             // Create package
             $package = PackagesModel::create($validated);
@@ -83,11 +108,24 @@ class PackagesController extends Controller
                 'data' => $package
             ], 201);
             
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle database errors specifically
+            return response()->json([
+                'success' => false,
+                'message' => 'Database error occurred.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create package. Please try again.',
-                'error' => $e->getMessage()
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
