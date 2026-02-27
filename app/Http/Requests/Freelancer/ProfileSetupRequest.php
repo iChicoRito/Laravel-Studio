@@ -22,7 +22,7 @@ class ProfileSetupRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             // Personal Information
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'freelancer_mobile_number' => 'required|string|max:20|unique:tbl_users,mobile_number,' . auth()->id(),
@@ -46,6 +46,11 @@ class ProfileSetupRequest extends FormRequest
             'starting_price' => 'required|numeric|min:0',
             'deposit_policy' => 'required|in:required,not_required',
             
+            // ==== Start: Deposit Policy Enhancement ==== //
+            'deposit_type' => 'required_if:deposit_policy,required|in:fixed,percentage|nullable',
+            'deposit_amount' => 'required_if:deposit_policy,required|numeric|min:0.01|nullable',
+            // ==== End: Deposit Policy Enhancement ==== //
+            
             // Availability and Schedule
             'operating_days' => 'required|array|min:1',
             'operating_days.*' => 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
@@ -64,6 +69,22 @@ class ProfileSetupRequest extends FormRequest
             // Verification Documents
             'freelancer_id_document' => 'required|file|mimes:pdf,jpeg,png,jpg|max:3072',
         ];
+
+        // Additional validation for deposit amount based on type
+        // ==== Start: Deposit Policy Enhancement ==== //
+        if ($this->input('deposit_policy') === 'required') {
+            $depositType = $this->input('deposit_type');
+            $depositAmount = $this->input('deposit_amount');
+            
+            if ($depositType === 'percentage' && ($depositAmount < 1 || $depositAmount > 100)) {
+                $rules['deposit_amount'] = 'required|numeric|min:1|max:100';
+            } elseif ($depositType === 'fixed') {
+                $rules['deposit_amount'] = 'required|numeric|min:1|max:1000000';
+            }
+        }
+        // ==== End: Deposit Policy Enhancement ==== //
+
+        return $rules;
     }
 
     /**
@@ -78,6 +99,13 @@ class ProfileSetupRequest extends FormRequest
             'portfolios.*.max' => 'Portfolio images must not exceed 3MB each.',
             'freelancer_id_document.required' => 'Please upload a valid government ID.',
             'end_time.after' => 'End time must be after start time.',
+            
+            // ==== Start: Deposit Policy Enhancement ==== //
+            'deposit_type.required_if' => 'Please select a deposit type (Fixed Amount or Percentage).',
+            'deposit_amount.required_if' => 'Please enter a deposit amount.',
+            'deposit_amount.min' => 'Deposit amount must be at least :min.',
+            'deposit_amount.max' => 'Deposit amount must not exceed :max.',
+            // ==== End: Deposit Policy Enhancement ==== //
         ];
     }
 
@@ -107,5 +135,15 @@ class ProfileSetupRequest extends FormRequest
                 'portfolios' => $this->file('portfolios')
             ]);
         }
+
+        // ==== Start: Deposit Policy Enhancement ==== //
+        // Ensure deposit fields are null if deposit_policy is not_required
+        if ($this->input('deposit_policy') === 'not_required') {
+            $this->merge([
+                'deposit_type' => null,
+                'deposit_amount' => null
+            ]);
+        }
+        // ==== End: Deposit Policy Enhancement ==== //
     }
 }

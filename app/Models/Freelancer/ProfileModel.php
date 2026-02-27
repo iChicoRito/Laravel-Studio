@@ -34,6 +34,8 @@ class ProfileModel extends Model
         'service_area',
         'starting_price',
         'deposit_policy',
+        'deposit_type',
+        'deposit_amount',
         'portfolio_works',
         'facebook_url',
         'instagram_url',
@@ -49,6 +51,9 @@ class ProfileModel extends Model
     protected $casts = [
         'portfolio_works' => 'array',
         'starting_price' => 'decimal:2',
+        // ==== Start: Deposit Policy Enhancement ==== //
+        'deposit_amount' => 'decimal:2',
+        // ==== End: Deposit Policy Enhancement ==== //
     ];
 
     /**
@@ -103,4 +108,74 @@ class ProfileModel extends Model
     {
         return $this->hasMany(\App\Models\FreelancerRatingModel::class, 'freelancer_id', 'user_id');
     }
+
+    // ==== Start: Deposit Policy Enhancement ==== //
+    
+    /**
+     * Get formatted deposit display text
+     */
+    public function getDepositDisplayAttribute(): string
+    {
+        if ($this->deposit_policy !== 'required') {
+            return 'No deposit required (Full payment upon booking)';
+        }
+
+        if ($this->deposit_type === 'fixed') {
+            return 'PHP ' . number_format($this->deposit_amount, 2) . ' fixed deposit';
+        } elseif ($this->deposit_type === 'percentage') {
+            return $this->deposit_amount . '% of total amount deposit';
+        }
+
+        return 'Deposit required (Amount not configured)';
+    }
+
+    /**
+     * Calculate deposit amount based on total booking amount
+     * 
+     * @param float $totalAmount
+     * @return float|null Returns null if deposit not required, otherwise calculated amount
+     */
+    public function calculateDepositAmount(float $totalAmount): ?float
+    {
+        if ($this->deposit_policy !== 'required') {
+            return null; // No deposit required
+        }
+
+        if ($this->deposit_type === 'fixed') {
+            return (float) $this->deposit_amount;
+        } elseif ($this->deposit_type === 'percentage') {
+            return ($totalAmount * (float) $this->deposit_amount) / 100;
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if deposit is configured properly
+     */
+    public function hasValidDepositConfiguration(): bool
+    {
+        if ($this->deposit_policy !== 'required') {
+            return true; // Not required is always valid
+        }
+
+        return !is_null($this->deposit_type) && 
+               !is_null($this->deposit_amount) && 
+               $this->deposit_amount > 0;
+    }
+
+    /**
+     * Get deposit type label
+     */
+    public function getDepositTypeLabelAttribute(): string
+    {
+        $labels = [
+            'fixed' => 'Fixed Amount',
+            'percentage' => 'Percentage (%)',
+        ];
+
+        return $labels[$this->deposit_type] ?? 'Not specified';
+    }
+
+    // ==== End: Deposit Policy Enhancement ==== //
 }

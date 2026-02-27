@@ -129,34 +129,6 @@
                 </div>
             </li>
 
-            {{-- Manage Services --}}
-            @php
-                $manageServicesRoutes = Route::is('freelancer.services.index');
-                $createServicesRoutes = Route::is('freelancer.services.create');
-            @endphp
-            
-            <li class="side-nav-item {{ $manageServicesRoutes || $createServicesRoutes ? 'active' : '' }}">
-                <a data-bs-toggle="collapse" href="#sidebarManageServices" aria-expanded="{{ $manageServicesRoutes || $createServicesRoutes ? 'true' : 'false' }}" aria-controls="sidebarManageServices" class="side-nav-link {{ $manageServicesRoutes || $createServicesRoutes ? 'active' : '' }}">
-                    <span class="menu-icon"><i data-lucide="list-tree"></i></span>
-                    <span class="menu-text" data-lang="manage-category-services">Services</span>
-                    <span class="menu-arrow"></span>
-                </a>
-                <div class="collapse {{ $manageServicesRoutes || $createServicesRoutes ? 'show' : '' }}" id="sidebarManageServices">
-                    <ul class="sub-menu">
-                        <li class="side-nav-item">
-                            <a href="{{ route('freelancer.services.index') }}" class="side-nav-link {{ $manageServicesRoutes ? 'active' : '' }}">
-                                <span class="menu-text" data-lang="services">View Services</span>
-                            </a>
-                        </li>
-                        <li class="side-nav-item">
-                            <a href="{{ route('freelancer.services.create') }}" class="side-nav-link {{ $createServicesRoutes ? 'active' : '' }}">
-                                <span class="menu-text" data-lang="create-service">Create Service</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </li>
-
             {{-- Manage Packages --}}
             @php
                 $viewPackagesRoutes = Route::is('freelancer.packages.index');
@@ -185,6 +157,34 @@
                         <li class="side-nav-item">
                             <a href="{{ route('freelancer.packages.list') }}" class="side-nav-link {{ $listPackagesRoutes ? 'active' : '' }}">
                                 <span class="menu-text" data-lang="list-packages">List Packages</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+
+            {{-- Manage Services --}}
+            @php
+                $manageServicesRoutes = Route::is('freelancer.services.index');
+                $createServicesRoutes = Route::is('freelancer.services.create');
+            @endphp
+            
+            <li class="side-nav-item {{ $manageServicesRoutes || $createServicesRoutes ? 'active' : '' }}">
+                <a data-bs-toggle="collapse" href="#sidebarManageServices" aria-expanded="{{ $manageServicesRoutes || $createServicesRoutes ? 'true' : 'false' }}" aria-controls="sidebarManageServices" class="side-nav-link {{ $manageServicesRoutes || $createServicesRoutes ? 'active' : '' }}">
+                    <span class="menu-icon"><i data-lucide="list-tree"></i></span>
+                    <span class="menu-text" data-lang="manage-category-services">Services</span>
+                    <span class="menu-arrow"></span>
+                </a>
+                <div class="collapse {{ $manageServicesRoutes || $createServicesRoutes ? 'show' : '' }}" id="sidebarManageServices">
+                    <ul class="sub-menu">
+                        <li class="side-nav-item">
+                            <a href="{{ route('freelancer.services.index') }}" class="side-nav-link {{ $manageServicesRoutes ? 'active' : '' }}">
+                                <span class="menu-text" data-lang="services">View Services</span>
+                            </a>
+                        </li>
+                        <li class="side-nav-item">
+                            <a href="{{ route('freelancer.services.create') }}" class="side-nav-link {{ $createServicesRoutes ? 'active' : '' }}">
+                                <span class="menu-text" data-lang="create-service">Create Service</span>
                             </a>
                         </li>
                     </ul>

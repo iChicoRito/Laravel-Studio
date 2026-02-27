@@ -113,7 +113,7 @@ class ProfileController extends Controller
             }
 
             // Create freelancer profile
-            $profile = ProfileModel::create([
+            $profileData = [
                 'user_id' => $user->id,
                 'location_id' => $location->id,
                 'brand_name' => $request->brand_name,
@@ -126,12 +126,18 @@ class ProfileController extends Controller
                 'service_area' => $request->service_area,
                 'starting_price' => $request->starting_price,
                 'deposit_policy' => $request->deposit_policy,
+                // ==== Start: Deposit Policy Enhancement ==== //
+                'deposit_type' => $request->deposit_policy === 'required' ? $request->deposit_type : null,
+                'deposit_amount' => $request->deposit_policy === 'required' ? $request->deposit_amount : null,
+                // ==== End: Deposit Policy Enhancement ==== //
                 'portfolio_works' => !empty($portfolioWorks) ? json_encode($portfolioWorks) : null,
                 'facebook_url' => $request->facebook_url,
                 'instagram_url' => $request->instagram_url,
                 'website_url' => $request->website_url,
                 'valid_id' => $validIdPath,
-            ]);
+            ];
+
+            $profile = ProfileModel::create($profileData);
 
             // Create freelancer schedule
             FreelancerScheduleModel::create([
