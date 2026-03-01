@@ -93,7 +93,7 @@
                         @endauth
                     </a>
                     <div class="dropdown-menu dropdown-menu-end">
-                        <a href="" class="dropdown-item">
+                        <a href="{{ route('admin.profile') }}" class="dropdown-item">
                             <i class="ti ti-user-circle me-1 fs-17 align-middle"></i>
                             <span class="align-middle">Profile</span>
                         </a>

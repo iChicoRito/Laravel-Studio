@@ -32,10 +32,22 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{id}/read',    [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.mark-read');
         Route::post('/read-all',     [\App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
         Route::delete('/{id}',       [\App\Http\Controllers\NotificationController::class, 'destroy'])->name('notifications.destroy');
+
+    });
+
+    // Profile =================================================================================================================================================================
+    Route::prefix('profile')->group(function () {
+
+        Route::get('/data',               [\App\Http\Controllers\GeneralProfileController::class, 'getUserData'])->name('profile.data');
+        Route::post('/update',            [\App\Http\Controllers\GeneralProfileController::class, 'update'])->name('profile.update');
+
     });
 
     // Admin Routes ========================================================================================================================================================
     Route::prefix('admin')->middleware([AdminMiddleware::class])->group(function () {
+
+        // Profile
+        Route::get('/profile',                      [\App\Http\Controllers\GeneralProfileController::class, 'admin'])->name('admin.profile');
 
         // Dashboard
         Route::get('/dashboard',                    [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('admin.dashboard');
@@ -84,10 +96,14 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/subscription/{id}',            [\App\Http\Controllers\Admin\SubscriptionController::class, 'update'])->name('admin.subscription.update');
         Route::delete('/subscription/{id}',         [\App\Http\Controllers\Admin\SubscriptionController::class, 'destroy'])->name('admin.subscription.delete');
         Route::get('/subscription/data/all',        [\App\Http\Controllers\Admin\SubscriptionController::class, 'getPlans'])->name('admin.subscription.data');
+
     });
 
     // Studio Owner Routes =================================================================================================================================================
     Route::prefix('owner')->middleware([OwnerMiddleware::class])->group(function () {
+
+        // Profile
+        Route::get('/profile',                                  [\App\Http\Controllers\GeneralProfileController::class, 'owner'])->name('owner.profile');
 
         // Dashboard
         Route::get('/dashboard',                                [\App\Http\Controllers\StudioOwner\DashboardController::class, 'index'])->name('owner.dashboard');
@@ -173,10 +189,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/subscription/verify/{reference}',          [\App\Http\Controllers\StudioOwner\SubscriptionController::class, 'verifyPayment'])->name('owner.subscription.verify');
         Route::get('/subscription/success/{reference}',         [\App\Http\Controllers\StudioOwner\SubscriptionController::class, 'paymentSuccess'])->name('owner.subscription.success');
         Route::get('/subscription/failed/{reference}',          [\App\Http\Controllers\StudioOwner\SubscriptionController::class, 'paymentFailed'])->name('owner.subscription.failed');
+
     });
 
     // Freelancer Routes ===================================================================================================================================================
     Route::prefix('freelancer')->middleware([FreelancerMiddleware::class])->group(function () {
+
+        // Profile
+        Route::get('/profile',                              [\App\Http\Controllers\GeneralProfileController::class, 'freelancer'])->name('freelancer.profile');
 
         // Dashboard
         Route::get('/dashboard',                            [\App\Http\Controllers\Freelancer\DashboardController::class, 'index'])->name('freelancer.dashboard');
@@ -227,10 +247,14 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/online-gallery/{galleryId}/image',  [\App\Http\Controllers\Freelancer\OnlineGalleryController::class, 'deleteImage'])->name('freelancer.online-gallery.delete-image');
         Route::delete('/online-gallery/{galleryId}',        [\App\Http\Controllers\Freelancer\OnlineGalleryController::class, 'deleteGallery'])->name('freelancer.online-gallery.delete');
         Route::put('/online-gallery/{galleryId}',           [\App\Http\Controllers\Freelancer\OnlineGalleryController::class, 'updateGallery'])->name('freelancer.online-gallery.update');
+
     });
 
     // Studio-Photographer  =======================================================================================================================================================
     Route::prefix('studio-photographer')->middleware([StudioPhotographerMiddleware::class])->group(function () {
+
+        // Profile
+        Route::get('/profile',                                  [\App\Http\Controllers\GeneralProfileController::class, 'studio-photographer'])->name('studio-photographer.profile');
 
         // Dashboard
         Route::get('/dashboard',                        [\App\Http\Controllers\StudioPhotographer\DashboardController::class, 'index'])->name('studio-photographer.dashboard');
@@ -256,6 +280,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Client Routes =======================================================================================================================================================
     Route::prefix('client')->middleware([ClientMiddleware::class])->group(function () {
+
+        // Profile
+        Route::get('/profile',                                  [\App\Http\Controllers\GeneralProfileController::class, 'client'])->name('client.profile');
 
         // Dashboard
         Route::get('/dashboard',                                [\App\Http\Controllers\Client\DashboardController::class, 'index'])->name('client.dashboard');
@@ -324,6 +351,7 @@ Route::middleware(['auth'])->group(function () {
         
         return redirect()->route('login');
     });
+    
 });
 
 // Fallback route for 404 errors (MUST BE AT THE END)

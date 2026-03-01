@@ -27,6 +27,7 @@ class UserModel extends Authenticatable
         'mobile_number',
         'password',
         'profile_photo',
+        'cover_photo',
         'location_id',
         'status',
         'email_verified',
@@ -211,5 +212,69 @@ class UserModel extends Authenticatable
     public function getProvinceAttribute(): ?string
     {
         return $this->location ? $this->location->province : null;
+    }
+
+    /**
+     * Get profile photo URL or default
+     */
+    public function getProfilePhotoUrlAttribute()
+    {
+        if (!empty($this->profile_photo)) {
+            // Check if it's already a full URL
+            if (filter_var($this->profile_photo, FILTER_VALIDATE_URL)) {
+                return $this->profile_photo;
+            }
+            
+            // Check if it's a storage path with 'storage/' prefix
+            if (strpos($this->profile_photo, 'storage/') === 0) {
+                return asset($this->profile_photo);
+            }
+            
+            // If it's just the filename (stored in profile-photos directory)
+            return asset('storage/' . $this->profile_photo);
+        }
+        
+        // Return placeholder if no profile photo
+        return asset('assets/images/users/user-3.jpg');
+    }
+
+    /**
+     * Get cover photo URL or default
+     */
+    public function getCoverPhotoUrlAttribute()
+    {
+        if (!empty($this->cover_photo)) {
+            // Check if it's already a full URL
+            if (filter_var($this->cover_photo, FILTER_VALIDATE_URL)) {
+                return $this->cover_photo;
+            }
+            
+            // Check if it's a storage path with 'storage/' prefix
+            if (strpos($this->cover_photo, 'storage/') === 0) {
+                return asset($this->cover_photo);
+            }
+            
+            // If it's just the filename (stored in cover-photos directory)
+            return asset('storage/' . $this->cover_photo);
+        }
+        
+        // Return placeholder if no cover photo
+        return asset('assets/images/profile-bg.jpg');
+    }
+
+    /**
+     * Check if user has profile photo
+     */
+    public function hasProfilePhoto(): bool
+    {
+        return !empty($this->profile_photo);
+    }
+
+    /**
+     * Check if user has cover photo
+     */
+    public function hasCoverPhoto(): bool
+    {
+        return !empty($this->cover_photo);
     }
 }
