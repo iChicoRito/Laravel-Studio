@@ -110,10 +110,21 @@
                                             <td>
                                                 <span class="fw-semibold">₱{{ number_format($booking->total_amount, 2) }}</span>
                                                 <small class="text-muted d-block">
-                                                    @if($booking->payment_type === 'downpayment')
-                                                        {{ $booking->downpayment_percentage ?? 30 }}% Downpayment
+                                                    @if($booking->booking_type === 'studio')
+                                                        @if($booking->payment_type === 'downpayment')
+                                                            {{ $booking->downpayment_percentage ?? 30 }}% Downpayment
+                                                        @else
+                                                            Full Payment
+                                                        @endif
                                                     @else
-                                                        Full Payment
+                                                        {{-- Freelancer dynamic display --}}
+                                                        @if(isset($booking->payment_display))
+                                                            {{ $booking->payment_display }}
+                                                        @elseif($booking->payment_type === 'downpayment')
+                                                            30% Downpayment
+                                                        @else
+                                                            Full Payment
+                                                        @endif
                                                     @endif
                                                 </small>
                                             </td>
@@ -697,6 +708,15 @@
                 const payments = data.payments;
                 const assignedPhotographers = data.assignedPhotographers;
                 const paymentSummary = data.payment_summary;
+                const depositInfo = data.deposit_info || {
+                    policy: 'required',
+                    type: 'percentage',
+                    amount: 30,
+                    display: '30% Downpayment',
+                    is_percentage: true,
+                    is_fixed: false,
+                    is_no_deposit: false
+                };
 
                 // Format date
                 const eventDate = new Date(booking.event_date);
@@ -735,9 +755,9 @@
                             providerContact += providerContact ? ' • ' + provider.studio_email : provider.studio_email;
                         }
                     } else {
-                        providerContact = provider.user ? provider.user.mobile_number || '' : '';
-                        if (provider.user && provider.user.email) {
-                            providerContact += providerContact ? ' • ' + provider.user.email : provider.user.email;
+                        providerContact = provider.contact_number || '';
+                        if (provider.contact_email) {
+                            providerContact += providerContact ? ' • ' + provider.contact_email : provider.contact_email;
                         }
                     }
                 }
@@ -800,11 +820,13 @@
                     packages.forEach(pkg => {
                         packagesHtml += `
                             <div class="row g-2 mb-3">
+                                <h5 class="card-title text-primary">PACKAGE DETAILS</h5>
+                                
                                 <div class="col-12">
                                     <div class="d-flex align-items-start">
                                         <div class="flex-shrink-0">
                                             <div class="bg-light-primary rounded-circle p-2">
-                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                                <i class="ti ti-package fs-20 text-primary"></i>
                                             </div>
                                         </div>
                                         <div class="flex-grow-1 ms-3">
@@ -818,7 +840,7 @@
                                     <div class="d-flex align-items-start">
                                         <div class="flex-shrink-0">
                                             <div class="bg-light-primary rounded-circle p-2">
-                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                                <i class="ti ti-currency-peso fs-20 text-primary"></i>
                                             </div>
                                         </div>
                                         <div class="flex-grow-1 ms-3">
@@ -832,7 +854,7 @@
                                     <div class="d-flex align-items-start">
                                         <div class="flex-shrink-0">
                                             <div class="bg-light-primary rounded-circle p-2">
-                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                                <i class="ti ti-clock fs-20 text-primary"></i>
                                             </div>
                                         </div>
                                         <div class="flex-grow-1 ms-3">
@@ -846,7 +868,7 @@
                                     <div class="d-flex align-items-start">
                                         <div class="flex-shrink-0">
                                             <div class="bg-light-primary rounded-circle p-2">
-                                                <i class="ti ti-star fs-20 text-primary"></i>
+                                                <i class="ti ti-camera fs-20 text-primary"></i>
                                             </div>
                                         </div>
                                         <div class="flex-grow-1 ms-3">
@@ -861,7 +883,7 @@
                                         <div class="d-flex align-items-start">
                                             <div class="flex-shrink-0">
                                                 <div class="bg-light-primary rounded-circle p-2">
-                                                    <i class="ti ti-star fs-20 text-primary"></i>
+                                                    <i class="ti ti-map-pin fs-20 text-primary"></i>
                                                 </div>
                                             </div>
                                             <div class="flex-grow-1 ms-3">
@@ -877,13 +899,13 @@
                                         <div class="d-flex align-items-start">
                                             <div class="flex-shrink-0">
                                                 <div class="bg-light-primary rounded-circle p-2">
-                                                    <i class="ti ti-star fs-20 text-primary"></i>
+                                                    <i class="ti ti-checklist fs-20 text-primary"></i>
                                                 </div>
                                             </div>
                                             <div class="flex-grow-1 ms-3">
                                                 <label class="text-muted small mb-1">Inclusions</label>
                                                 <ul class="mb-0 ps-3">
-                                                    ${pkg.package_inclusions.map(inc => `<li class="fw-medium">${inc}</li>`).join('')}
+                                                    ${pkg.package_inclusions.map(inc => `<li class="fw-medium"><i class="ti ti-check text-success me-2 fs-14"></i>${inc}</li>`).join('')}
                                                 </ul>
                                             </div>
                                         </div>
@@ -907,7 +929,7 @@
                                 <div class="d-flex align-items-start">
                                     <div class="flex-shrink-0">
                                         <div class="bg-light-primary rounded-circle p-2">
-                                            <i class="ti ti-star fs-20 text-primary"></i>
+                                            <i class="ti ti-user-star fs-20 text-primary"></i>
                                         </div>
                                     </div>
                                     <div class="flex-grow-1 ms-3">
@@ -922,13 +944,14 @@
                             </div>
                         `;
                     });
-                } else {
+                } else if (providerType === 'studio') {
+                    // Only show for studios since freelancers don't have assigned photographers
                     assignedPhotographersHtml = `
                         <div class="col-12">
                             <div class="d-flex align-items-start">
                                 <div class="flex-shrink-0">
                                     <div class="bg-light-primary rounded-circle p-2">
-                                        <i class="ti ti-star fs-20 text-primary"></i>
+                                        <i class="ti ti-user-star fs-20 text-primary"></i>
                                     </div>
                                 </div>
                                 <div class="flex-grow-1 ms-3">
@@ -940,8 +963,57 @@
                     `;
                 }
                 
-                // Get downpayment percentage
-                let downpaymentPercentage = data.downpayment_percentage || 30;
+                // ========== FIX: Get deposit display based on provider type ==========
+                let depositDisplayHtml = '';
+                let paymentTypeDisplay = '';
+                
+                if (providerType === 'freelancer') {
+                    if (depositInfo.is_no_deposit) {
+                        depositDisplayHtml = `
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Payment Type:</span>
+                                <span class="fw-medium text-success">Full Payment (No Deposit Required)</span>
+                            </div>
+                        `;
+                        paymentTypeDisplay = 'Full Payment';
+                    } else if (depositInfo.is_fixed) {
+                        depositDisplayHtml = `
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Fixed Deposit:</span>
+                                <span class="fw-medium">₱${parseFloat(depositInfo.amount).toFixed(2)}</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Package Price:</span>
+                                <span class="fw-medium">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
+                            </div>
+                        `;
+                        paymentTypeDisplay = 'Fixed Deposit';
+                    } else if (depositInfo.is_percentage) {
+                        depositDisplayHtml = `
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">Down Payment (${depositInfo.amount}%):</span>
+                                <span class="fw-medium">- ₱${parseFloat(paymentSummary.down_payment).toFixed(2)}</span>
+                            </div>
+                        `;
+                        paymentTypeDisplay = depositInfo.amount + '% Down Payment';
+                    }
+                } else {
+                    // Studio display
+                    depositDisplayHtml = `
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted">Down Payment (${depositInfo.amount}%):</span>
+                            <span class="fw-medium">- ₱${parseFloat(paymentSummary.down_payment).toFixed(2)}</span>
+                        </div>
+                    `;
+                    paymentTypeDisplay = depositInfo.amount + '% Down Payment';
+                }
+                
+                // For full payment bookings
+                if (booking.payment_type === 'full_payment') {
+                    depositDisplayHtml = '';
+                    paymentTypeDisplay = 'Full Payment';
+                }
+                // ========== End of deposit display logic ==========
                 
                 const modalContent = `
                     <div class="row align-items-center mb-4">
@@ -958,7 +1030,7 @@
                                     </div>
                                     
                                     <p class="text-muted mb-0">
-                                        <i class="ti ti-star me-1"></i> ${locationTypeDisplay} | ${categoryName}
+                                        <i class="ti ti-map-pin me-1"></i> ${locationTypeDisplay} | ${categoryName}
                                     </p>
                                 </div>
                             </div>
@@ -968,7 +1040,7 @@
                     <div class="row mb-3">
                         <div class="col">
                             <div class="row g-2 mb-3">
-                                <h5 class="card-title text-primary">BOOKING INFORMATION</h5>
+                                <h5 class="card-title text-primary"><i class="ti ti-info-circle me-2"></i>BOOKING INFORMATION</h5>
                                 
                                 <div class="col-12 col-md-6">
                                     <div class="d-flex align-items-start">
@@ -1045,7 +1117,7 @@
                             </div>
 
                             <div class="row g-2 mb-3">
-                                <h5 class="card-title text-primary">SERVICE PROVIDER</h5>
+                                <h5 class="card-title text-primary"><i class="ti ti-building-store me-2"></i>SERVICE PROVIDER</h5>
                                 
                                 <div class="col-12">
                                     <div class="d-flex align-items-start">
@@ -1077,33 +1149,28 @@
                             </div>
 
                             <div class="row g-2 mb-3">
-                                <h5 class="card-title text-primary">PAYMENT INFORMATION</h5>
+                                <h5 class="card-title text-primary"><i class="ti ti-credit-card me-2"></i>PAYMENT INFORMATION</h5>
                                 
                                 <div class="col-12">
                                     <div class="card border bg-light">
                                         <div class="card-body p-3">
                                             {{-- Receipt Header --}}
                                             <div class="text-start mb-3 pb-2 border-bottom">
-                                                <h6 class="fw-bold mb-1">PAYMENT RECEIPT</h6>
+                                                <h6 class="fw-bold mb-1"><i class="ti ti-receipt me-2"></i>PAYMENT RECEIPT</h6>
                                                 <small class="text-muted">Booking #${booking.booking_reference}</small>
                                             </div>
                                             
                                             {{-- Receipt Items --}}
                                             <div class="mb-3">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                                    <span class="text-muted">Package Subtotal:</span>
+                                                    <span class="text-muted"><i class="ti ti-package me-2"></i>Package Subtotal:</span>
                                                     <span class="fw-medium">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
                                                 </div>
                                                 
-                                                ${booking.payment_type === 'downpayment' ? `
-                                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <span class="text-muted">Down Payment (${downpaymentPercentage}%):</span>
-                                                        <span class="fw-medium">- ₱${parseFloat(paymentSummary.down_payment).toFixed(2)}</span>
-                                                    </div>
-                                                ` : ''}
+                                                ${depositDisplayHtml}
                                                 
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                                    <span class="text-muted">Amount Paid:</span>
+                                                    <span class="text-muted"><i class="ti ti-circle-check me-2 text-success"></i>Amount Paid:</span>
                                                     <span class="fw-medium text-success">₱${parseFloat(paymentSummary.total_paid).toFixed(2)}</span>
                                                 </div>
                                                 
@@ -1112,12 +1179,12 @@
                                                 
                                                 {{-- Totals --}}
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                                    <span class="fw-bold">Total Amount:</span>
+                                                    <span class="fw-bold"><i class="ti ti-calculator me-2"></i>Total Amount:</span>
                                                     <span class="fw-bold">₱${parseFloat(paymentSummary.total_amount).toFixed(2)}</span>
                                                 </div>
                                                 
                                                 <div class="d-flex justify-content-between align-items-center ${paymentSummary.remaining_balance > 0 ? 'text-danger' : 'text-success'} fw-bold">
-                                                    <span>Remaining Balance:</span>
+                                                    <span><i class="ti ti-wallet me-2"></i>Remaining Balance:</span>
                                                     <span>₱${parseFloat(paymentSummary.remaining_balance).toFixed(2)}</span>
                                                 </div>
                                             </div>
@@ -1129,7 +1196,8 @@
                                                     ${booking.payment_status.replace('_', ' ').toUpperCase()}
                                                 </span>
                                                 <small class="d-block text-muted mt-2">
-                                                    Payment Type: ${booking.payment_type === 'downpayment' ? downpaymentPercentage + '% Down Payment' : 'Full Payment'}
+                                                    <i class="ti ti-tag me-1"></i>
+                                                    Payment Type: ${paymentTypeDisplay}
                                                 </small>
                                             </div>
                                         </div>
@@ -1155,13 +1223,15 @@
 
                             ${packagesHtml}
 
-                            <div class="row g-2 mb-3">
-                                <h5 class="card-title text-primary">ASSIGNED PHOTOGRAPHERS</h5>
-                                ${assignedPhotographersHtml}
-                            </div>
+                            ${providerType === 'studio' ? `
+                                <div class="row g-2 mb-3">
+                                    <h5 class="card-title text-primary"><i class="ti ti-users me-2"></i>ASSIGNED PHOTOGRAPHERS</h5>
+                                    ${assignedPhotographersHtml}
+                                </div>
+                            ` : ''}
 
                             <div class="row g-2 mb-3">
-                                <h5 class="card-title text-primary">BOOKING STATUS</h5>
+                                <h5 class="card-title text-primary"><i class="ti ti-checklist me-2"></i>BOOKING STATUS</h5>
                                 
                                 <div class="col-12 col-md-6">
                                     <div class="d-flex align-items-start">
@@ -1188,7 +1258,7 @@
                                             <label class="text-muted small mb-1">Payment Status</label>
                                             <p class="mb-0 fw-medium">
                                                 <span class="badge ${getPaymentStatusBadgeClass(booking.payment_status)}">${booking.payment_status.replace('_', ' ').toUpperCase()}</span> | 
-                                                Payment Type: ${booking.payment_type === 'downpayment' ? downpaymentPercentage + '% Down Payment' : 'Full Payment'}
+                                                <span class="text-muted">${paymentTypeDisplay}</span>
                                             </p>
                                         </div>
                                     </div>

@@ -13,8 +13,8 @@ use Carbon\Carbon;
 class MyBookingsController extends Controller
 {
     /**
-     * Display current bookings (pending, confirmed, in_progress)
-     */
+    * Display current bookings (pending, confirmed, in_progress)
+    */
     public function index(Request $request)
     {
         $userId = Auth::id();
@@ -40,10 +40,27 @@ class MyBookingsController extends Controller
                 $booking->downpayment_percentage = $studio->downpayment_percentage ?? 30;
             } else {
                 $freelancer = \App\Models\Freelancer\ProfileModel::where('user_id', $booking->provider_id)
-                    ->select('user_id', 'brand_name', 'brand_logo')
+                    ->select('user_id', 'brand_name', 'brand_logo', 'deposit_policy', 'deposit_type', 'deposit_amount')
                     ->first();
                 $booking->provider = $freelancer;
-                $booking->downpayment_percentage = 30; // Default for freelancer
+                
+                // ========== FIX: Calculate downpayment percentage for display ==========
+                if ($freelancer && $freelancer->deposit_policy === 'required') {
+                    if ($freelancer->deposit_type === 'percentage') {
+                        $booking->downpayment_percentage = $freelancer->deposit_amount ?? 30;
+                        $booking->payment_display = $booking->downpayment_percentage . '% Downpayment';
+                    } elseif ($freelancer->deposit_type === 'fixed') {
+                        $booking->downpayment_percentage = 0; // Not applicable
+                        $booking->payment_display = 'Fixed: ₱' . number_format($freelancer->deposit_amount, 2);
+                    } else {
+                        $booking->downpayment_percentage = 30;
+                        $booking->payment_display = '30% Downpayment';
+                    }
+                } else {
+                    $booking->downpayment_percentage = 100;
+                    $booking->payment_display = 'Full Payment';
+                }
+                // ========== End of freelancer deposit logic ==========
             }
         });
         
@@ -85,8 +102,8 @@ class MyBookingsController extends Controller
     }
 
     /**
-     * Get booking details for modal
-     */
+    * Get booking details for modal
+    */
     public function getBookingDetails($id)
     {
         try {
@@ -107,6 +124,13 @@ class MyBookingsController extends Controller
             $providerType = null;
             $downpaymentPercentage = 30; // Default fallback
             
+            // ========== ADD: Variables for deposit display ==========
+            $depositPolicy = 'required';
+            $depositType = 'percentage';
+            $depositAmount = 30;
+            $depositDisplay = '30% Downpayment';
+            // ========== End of deposit variables ==========
+            
             if ($booking->booking_type === 'studio') {
                 $provider = \App\Models\StudioOwner\StudiosModel::where('id', $booking->provider_id)
                     ->select('id', 'studio_name', 'studio_logo', 'contact_number', 'studio_email', 'starting_price', 'downpayment_percentage')
@@ -117,9 +141,24 @@ class MyBookingsController extends Controller
                 if ($provider && $provider->downpayment_percentage) {
                     $downpaymentPercentage = $provider->downpayment_percentage;
                 }
+                
+                // ========== Studio deposit display ==========
+                $depositType = 'percentage';
+                $depositAmount = $downpaymentPercentage;
+                $depositDisplay = $downpaymentPercentage . '% Downpayment';
+                // ========== End of studio deposit display ==========
+                
             } else {
                 $provider = \App\Models\Freelancer\ProfileModel::where('user_id', $booking->provider_id)
-                    ->select('user_id as id', 'brand_name', 'brand_logo', 'starting_price')
+                    ->select(
+                        'user_id as id', 
+                        'brand_name', 
+                        'brand_logo', 
+                        'starting_price',
+                        'deposit_policy',
+                        'deposit_type',
+                        'deposit_amount'
+                    )
                     ->first();
                 $providerType = 'freelancer';
                 
@@ -132,8 +171,38 @@ class MyBookingsController extends Controller
                     $provider->contact_number = $user->mobile_number ?? null;
                 }
                 
-                // For freelancer, you can set a default or add a column later
-                $downpaymentPercentage = 30; // Default for freelancer
+                // ========== FIX: Get freelancer deposit settings ==========
+                if ($provider) {
+                    $depositPolicy = $provider->deposit_policy ?? 'not_required';
+                    
+                    if ($depositPolicy === 'required') {
+                        $depositType = $provider->deposit_type ?? 'percentage';
+                        $depositAmount = $provider->deposit_amount ?? 30;
+                        
+                        if ($depositType === 'percentage') {
+                            $downpaymentPercentage = $depositAmount;
+                            $depositDisplay = $depositAmount . '% Downpayment';
+                        } else { // fixed
+                            $downpaymentPercentage = 0; // Not applicable for fixed
+                            $depositDisplay = 'Fixed Deposit: ₱' . number_format($depositAmount, 2);
+                        }
+                    } else {
+                        // No deposit required - full payment
+                        $depositPolicy = 'not_required';
+                        $depositType = null;
+                        $depositAmount = 0;
+                        $downpaymentPercentage = 100;
+                        $depositDisplay = 'Full Payment (No Deposit)';
+                    }
+                } else {
+                    // Fallback if provider not found
+                    $depositPolicy = 'required';
+                    $depositType = 'percentage';
+                    $depositAmount = 30;
+                    $downpaymentPercentage = 30;
+                    $depositDisplay = '30% Downpayment';
+                }
+                // ========== End of freelancer deposit logic ==========
             }
             
             // Calculate payment summary
@@ -149,7 +218,18 @@ class MyBookingsController extends Controller
                 'packages' => $booking->packages,
                 'payments' => $booking->payments,
                 'assignedPhotographers' => $booking->assignedPhotographers,
-                'downpayment_percentage' => $downpaymentPercentage, // ADD THIS
+                'downpayment_percentage' => $downpaymentPercentage,
+                // ========== ADD: Deposit information for display ==========
+                'deposit_info' => [
+                    'policy' => $depositPolicy,
+                    'type' => $depositType,
+                    'amount' => $depositAmount,
+                    'display' => $depositDisplay,
+                    'is_percentage' => $depositType === 'percentage',
+                    'is_fixed' => $depositType === 'fixed',
+                    'is_no_deposit' => $depositPolicy === 'not_required'
+                ],
+                // ========== End of deposit information ==========
                 'payment_summary' => [
                     'total_amount' => $booking->total_amount,
                     'down_payment' => $booking->down_payment,

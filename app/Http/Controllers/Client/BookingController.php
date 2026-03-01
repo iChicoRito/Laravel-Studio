@@ -29,8 +29,8 @@ class BookingController extends Controller
     }
 
     /**
-     * Show booking form with dynamic data
-     */
+    * Show booking form with dynamic data
+    */
     public function create($type, $id)
     {
         $user = Auth::user();
@@ -57,6 +57,12 @@ class BookingController extends Controller
             
             // Get downpayment percentage
             $downpaymentPercentage = $provider->downpayment_percentage ?? 30;
+            
+            // ========== STUDIO DEPOSIT INFO ==========
+            $depositPolicy = 'required'; // Studios always require downpayment
+            $depositType = 'percentage';
+            $depositAmount = $downpaymentPercentage;
+            $depositDisplay = $downpaymentPercentage . '% downpayment required';
         } else {
             $provider = ProfileModel::with(['user', 'categories', 'schedule'])
                 ->whereHas('user', function($query) {
@@ -79,6 +85,25 @@ class BookingController extends Controller
             if (is_string($operatingDays)) {
                 $operatingDays = json_decode($operatingDays, true) ?? [];
             }
+            
+            // ========== FREELANCER DEPOSIT LOGIC ==========
+            // Get deposit policy from freelancer profile
+            $depositPolicy = $provider->deposit_policy ?? 'not_required';
+            $depositType = $provider->deposit_type ?? null;
+            $depositAmount = $provider->deposit_amount ?? 0;
+            
+            // Calculate downpayment percentage for display (only relevant for percentage type)
+            if ($depositPolicy === 'required' && $depositType === 'percentage') {
+                $downpaymentPercentage = $depositAmount;
+                $depositDisplay = $downpaymentPercentage . '% downpayment required';
+            } elseif ($depositPolicy === 'required' && $depositType === 'fixed') {
+                $downpaymentPercentage = 0; // Not applicable for fixed amount
+                $depositDisplay = '₱' . number_format($depositAmount, 2) . ' fixed deposit required';
+            } else {
+                $downpaymentPercentage = 0;
+                $depositDisplay = 'No deposit required (full payment)';
+            }
+            // ========== End of Freelancer Deposit Logic ==========
         }
 
         // Get all active municipalities for dropdown
@@ -101,7 +126,11 @@ class BookingController extends Controller
             'availableDates',
             'municipalities',
             'operatingDays',
-            'downpaymentPercentage'
+            'downpaymentPercentage',
+            'depositPolicy',
+            'depositType',
+            'depositAmount',
+            'depositDisplay'
         ));
     }
 
@@ -391,7 +420,7 @@ class BookingController extends Controller
             'full_name' => 'required|string|max:255',
             'contact_number' => 'required|string|max:20',
             'email' => 'required|email|max:255',
-            'payment_type' => 'required|in:downpayment,full_payment',
+            // 'payment_type' is no longer required - we determine based on deposit policy
         ]);
 
         try {
@@ -422,42 +451,68 @@ class BookingController extends Controller
                 $package = FreelancerPackagesModel::findOrFail($request->package_id);
             }
 
-            // 4. Calculate amounts
+            // 4. Calculate amounts based on deposit policy
             $totalAmount = $package->package_price;
             
-            if ($request->payment_type === 'downpayment') {
-                // Get the downpayment percentage from the provider
-                if ($request->type === 'studio') {
-                    $studio = StudiosModel::find($request->provider_id);
-                    $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
-                } else {
-                    // For freelancer, default to 30% or use any freelancer-specific logic
-                    $downpaymentPercentage = 30;
-                }
-                
+            // ========== FIX: Implement deposit logic based on provider type ==========
+            if ($request->type === 'studio') {
+                // Studio logic (unchanged)
+                $studio = StudiosModel::find($request->provider_id);
+                $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
+                $paymentType = 'downpayment';
                 $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
                 $remainingBalance = $totalAmount - $downPayment;
+                $depositPolicy = $downpaymentPercentage . '%';
                 $paymentStatus = 'pending';
                 $bookingStatus = 'pending';
+                
             } else {
-                $downPayment = $totalAmount;
-                $remainingBalance = 0;
-                $paymentStatus = 'pending';
-                $bookingStatus = 'pending';
-            }
-
-            // Get the downpayment percentage for deposit_policy
-            $depositPolicy = '100%'; // Default for full payment
-            if ($request->payment_type === 'downpayment') {
-                if ($request->type === 'studio') {
-                    $studio = StudiosModel::find($request->provider_id);
-                    $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
-                    $depositPolicy = $downpaymentPercentage . '%';
+                // Freelancer logic based on deposit policy
+                $freelancer = ProfileModel::where('user_id', $request->provider_id)->first();
+                
+                if ($freelancer && $freelancer->deposit_policy === 'required') {
+                    // Deposit is required
+                    $paymentType = 'downpayment';
+                    
+                    if ($freelancer->deposit_type === 'percentage') {
+                        // Percentage-based deposit
+                        $downpaymentPercentage = $freelancer->deposit_amount ?? 30;
+                        $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
+                        $depositPolicy = $downpaymentPercentage . '%';
+                        
+                    } elseif ($freelancer->deposit_type === 'fixed') {
+                        // Fixed amount deposit
+                        $downPayment = $freelancer->deposit_amount ?? 0;
+                        $downpaymentPercentage = 0; // Not applicable
+                        $depositPolicy = 'Fixed: ₱' . number_format($downPayment, 2);
+                        
+                        // Ensure fixed deposit doesn't exceed total amount
+                        if ($downPayment > $totalAmount) {
+                            $downPayment = $totalAmount;
+                        }
+                    } else {
+                        // Fallback to 30% if type not set
+                        $downpaymentPercentage = 30;
+                        $downPayment = ($totalAmount * 30) / 100;
+                        $depositPolicy = '30%';
+                    }
+                    
+                    $remainingBalance = $totalAmount - $downPayment;
+                    $paymentStatus = 'pending';
+                    $bookingStatus = 'pending';
+                    
                 } else {
-                    // For freelancer, default to 30%
-                    $depositPolicy = '30%';
+                    // No deposit required - full payment
+                    $paymentType = 'full_payment';
+                    $downPayment = $totalAmount;
+                    $remainingBalance = 0;
+                    $downpaymentPercentage = 100;
+                    $depositPolicy = '100% (Full payment)';
+                    $paymentStatus = 'pending';
+                    $bookingStatus = 'pending';
                 }
             }
+            // ========== End of deposit logic ==========
 
             // 5. Create booking
             $booking = BookingModel::create([
@@ -480,7 +535,7 @@ class BookingController extends Controller
                 'down_payment' => $downPayment,
                 'remaining_balance' => $remainingBalance,
                 'deposit_policy' => $depositPolicy,
-                'payment_type' => $request->payment_type,
+                'payment_type' => $paymentType,
                 'status' => $bookingStatus,
                 'payment_status' => $paymentStatus,
             ]);
@@ -1267,7 +1322,7 @@ class BookingController extends Controller
         $request->validate([
             'package_id' => 'required|integer',
             'type' => 'required|in:studio,freelancer',
-            'payment_type' => 'required|in:downpayment,full_payment',
+            // payment_type no longer required for freelancer
         ]);
 
         if ($request->type === 'studio') {
@@ -1275,16 +1330,46 @@ class BookingController extends Controller
             // Get downpayment percentage
             $studio = StudiosModel::find($package->studio_id);
             $downpaymentPercentage = $studio->downpayment_percentage ?? 30;
+            $paymentType = 'downpayment';
         } else {
             $package = FreelancerPackagesModel::findOrFail($request->package_id);
-            // For freelancer, default to 30%
-            $downpaymentPercentage = 30;
+            
+            // ========== FIX: Get freelancer deposit settings ==========
+            $freelancer = ProfileModel::where('user_id', $package->user_id)->first();
+            
+            if ($freelancer && $freelancer->deposit_policy === 'required') {
+                // Deposit is required
+                $paymentType = 'downpayment';
+                
+                if ($freelancer->deposit_type === 'percentage') {
+                    $downpaymentPercentage = $freelancer->deposit_amount ?? 30;
+                } elseif ($freelancer->deposit_type === 'fixed') {
+                    $downpaymentPercentage = 0; // Not applicable for fixed amount
+                } else {
+                    $downpaymentPercentage = 30; // Fallback
+                }
+            } else {
+                // No deposit required - full payment
+                $paymentType = 'full_payment';
+                $downpaymentPercentage = 100;
+            }
+            // ========== End of freelancer deposit logic ==========
         }
 
         $totalAmount = $package->package_price;
         
-        if ($request->payment_type === 'downpayment') {
-            $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
+        if ($paymentType === 'downpayment') {
+            if ($request->type === 'freelancer' && isset($freelancer) && 
+                $freelancer->deposit_policy === 'required' && $freelancer->deposit_type === 'fixed') {
+                // Fixed amount deposit
+                $downPayment = $freelancer->deposit_amount ?? 0;
+                if ($downPayment > $totalAmount) {
+                    $downPayment = $totalAmount;
+                }
+            } else {
+                // Percentage-based deposit
+                $downPayment = ($totalAmount * $downpaymentPercentage) / 100;
+            }
             $remainingBalance = $totalAmount - $downPayment;
         } else {
             $downPayment = $totalAmount;
@@ -1301,11 +1386,19 @@ class BookingController extends Controller
             'inclusions' => $package->package_inclusions,
             'duration' => $package->duration,
             'maximum_edited_photos' => $package->maximum_edited_photos,
-            'payment_type' => $request->payment_type,
+            'payment_type' => $paymentType,
             'online_gallery' => $package->online_gallery ?? false,
             'gallery_status' => ($package->online_gallery ?? false) ? 'Included' : 'Not Included',
-            'package_location' => $package->package_location ?? 'In-Studio', // ADDED
+            'package_location' => $package->package_location ?? 'In-Studio',
         ];
+        
+        // Add fixed deposit info for freelancer if applicable
+        if ($request->type === 'freelancer' && isset($freelancer) && 
+            $freelancer->deposit_policy === 'required' && $freelancer->deposit_type === 'fixed') {
+            $packageData['deposit_type'] = 'fixed';
+            $packageData['deposit_amount'] = $freelancer->deposit_amount;
+            $packageData['deposit_display'] = 'Fixed Deposit: ₱' . number_format($freelancer->deposit_amount, 2);
+        }
         
         if ($request->type === 'studio') {
             $packageData['photographer_count'] = $package->photographer_count ?? 1;

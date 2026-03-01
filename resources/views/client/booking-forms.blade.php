@@ -229,27 +229,59 @@
                                 </div>
 
                                 {{-- PAYMENT TYPE --}}
-                                <h4 class="card-title text-primary mb-3">Payment Type</h4>
+                                <h4 class="card-title text-primary mb-3">Payment Details</h4>
                                 <div class="mb-4">
-                                    <div class="btn-group w-100" role="group" aria-label="Payment type selection">
-                                        @if($type === 'studio')
+                                    @if($type === 'studio')
+                                        {{-- Studio always shows payment options --}}
+                                        <div class="btn-group w-100" role="group" aria-label="Payment type selection">
                                             <input class="btn-check" type="radio" name="payment_type" id="payment_type_downpayment" value="downpayment" checked>
                                             <label class="btn btn-outline-primary" for="payment_type_downpayment">
                                                 <i class="ti ti-percentage me-1"></i> {{ $downpaymentPercentage }}% Downpayment
                                             </label>
-                                        @else
-                                            {{-- For freelancer, default to 30% if no column exists --}}
-                                            <input class="btn-check" type="radio" name="payment_type" id="payment_type_downpayment" value="downpayment" checked>
-                                            <label class="btn btn-outline-primary" for="payment_type_downpayment">
-                                                <i class="ti ti-percentage me-1"></i> 30% Downpayment
+                                            
+                                            <input class="btn-check" type="radio" name="payment_type" id="payment_type_full" value="full_payment">
+                                            <label class="btn btn-outline-primary" for="payment_type_full">
+                                                <i class="ti ti-discount-2 me-1"></i> Full Payment (5% OFF)
                                             </label>
+                                        </div>
+                                    @else
+                                        {{-- Freelancer dynamic display based on deposit policy --}}
+                                        @if($depositPolicy === 'required')
+                                            <div class="alert alert-info">
+                                                <i class="ti ti-info-circle me-2"></i>
+                                                <strong>Payment Required:</strong> {{ $depositDisplay }}
+                                            </div>
+                                            
+                                            @if($depositType === 'percentage')
+                                                {{-- For percentage deposits, show the percentage clearly --}}
+                                                <div class="bg-light p-3 rounded text-center">
+                                                    <span class="text-muted d-block mb-1">Required Deposit</span>
+                                                    <span class="display-6 fw-bold text-primary">{{ $depositAmount }}%</span>
+                                                    <span class="text-muted d-block mt-1">of total package price</span>
+                                                </div>
+                                                <input type="hidden" name="payment_type" value="downpayment">
+                                            @elseif($depositType === 'fixed')
+                                                {{-- For fixed deposits, show the fixed amount --}}
+                                                <div class="bg-light p-3 rounded text-center">
+                                                    <span class="text-muted d-block mb-1">Required Fixed Deposit</span>
+                                                    <span class="display-6 fw-bold text-primary">₱{{ number_format($depositAmount, 2) }}</span>
+                                                    <span class="text-muted d-block mt-1">fixed amount regardless of package price</span>
+                                                </div>
+                                                <input type="hidden" name="payment_type" value="downpayment">
+                                            @endif
+                                        @else
+                                            {{-- No deposit required --}}
+                                            <div class="alert alert-success">
+                                                <i class="ti ti-check-circle me-2"></i>
+                                                <strong>No Deposit Required:</strong> Full payment will be collected upon booking.
+                                            </div>
+                                            <div class="bg-light p-3 rounded text-center">
+                                                <span class="text-muted d-block mb-1">Payment Type</span>
+                                                <span class="display-6 fw-bold text-success">Full Payment</span>
+                                            </div>
+                                            <input type="hidden" name="payment_type" value="full_payment">
                                         @endif
-                                        
-                                        <input class="btn-check" type="radio" name="payment_type" id="payment_type_full" value="full_payment">
-                                        <label class="btn btn-outline-primary" for="payment_type_full">
-                                            <i class="ti ti-discount-2 me-1"></i> Full Payment (5% OFF)
-                                        </label>
-                                    </div>
+                                    @endif
                                 </div>
 
                                 {{-- EVENT LOCATION --}}
@@ -740,6 +772,9 @@
                     const packageRadio = $(`.package-radio[value="${selectedPackageId}"]`);
                     if (packageRadio.length) {
                         const packageData = packageRadio.data('package');
+                        
+                        // For freelancer, we still pass payment_type but server will override based on deposit policy
+                        // For studio, this works normally
                         getBookingSummaryWithPaymentType(packageData, paymentType);
                     }
                 }
@@ -1410,7 +1445,7 @@
                     data: {
                         package_id: packageData.id,
                         type: $('#bookingType').val(),
-                        payment_type: paymentType,
+                        payment_type: paymentType, // This will be used for studio, but for freelancer the server will use deposit policy
                         _token: '{{ csrf_token() }}'
                     },
                     success: function(response) {
@@ -1423,16 +1458,43 @@
                                 updateSummaryPriceDisplay(response.summary);
                             }
                             
-                            // Update the downpayment label text if needed
-                            const isStudio = $('#bookingType').val() === 'studio';
-                            if (isStudio && response.summary.downpayment_percentage) {
-                                const downpaymentLabel = $('label[for="payment_type_downpayment"]');
-                                if (downpaymentLabel.length) {
-                                    downpaymentLabel.html(`
-                                        <i class="ti ti-percentage me-1"></i> ${response.summary.downpayment_percentage}% Downpayment
-                                    `);
+                            // ========== FIX: Handle fixed deposit display for freelancer ==========
+                            @if($type === 'freelancer')
+                                // Check if this is a fixed deposit freelancer
+                                if (response.summary.deposit_type === 'fixed') {
+                                    $('#downPaymentLabel').text('Fixed Deposit:');
+                                    $('#downPayment').text('₱' + response.summary.down_payment);
+                                    
+                                    // Add info about fixed deposit
+                                    const depositInfo = `
+                                        <div class="alert alert-info mt-2 py-2 small">
+                                            <i class="ti ti-info-circle me-1"></i>
+                                            This freelancer requires a fixed deposit of ₱${response.summary.deposit_amount}.
+                                            ${parseFloat(response.summary.down_payment) < parseFloat(response.summary.total_amount.replace(/,/g, '')) ? 
+                                                'The remaining balance will be paid after the event.' : 
+                                                'This covers the full amount.'}
+                                        </div>
+                                    `;
+                                    
+                                    // Remove existing deposit info if any
+                                    $('.fixed-deposit-info').remove();
+                                    $('#downPaymentRow').after(depositInfo);
+                                } else {
+                                    const percentage = response.summary.downpayment_percentage || 30;
+                                    $('#downPaymentLabel').text(`Down Payment (${percentage}%):`);
+                                    $('.fixed-deposit-info').remove();
                                 }
-                            }
+                            @else
+                                const percentage = response.summary.downpayment_percentage || 30;
+                                $('#downPaymentLabel').text(`Down Payment (${percentage}%):`);
+                            @endif
+                            // ========== End of fixed deposit handling ==========
+                            
+                            // Hide payment type toggle for freelancers if deposit policy is configured
+                            @if($type === 'freelancer')
+                                // Payment type is handled by the server based on deposit policy
+                                // No need to show/hide anything here
+                            @endif
                         } else {
                             console.error('Summary response error:', response.message);
                         }
@@ -1451,6 +1513,7 @@
                     return false;
                 }
                 
+                // Check date availability status
                 const dateStatusText = $('#dateStatusText').text().toLowerCase();
                 if (dateStatusText.includes('fully booked') || 
                     dateStatusText.includes('not available') || 
@@ -1466,6 +1529,7 @@
                     return false;
                 }
                 
+                // Check if date has been checked
                 if ($('#dateStatusText').text() === 'Select a date to check availability') {
                     Swal.fire({
                         icon: 'warning',
@@ -1476,6 +1540,7 @@
                     return false;
                 }
                 
+                // Check if package is selected
                 if (!selectedPackageId) {
                     Swal.fire({
                         icon: 'warning',
@@ -1486,7 +1551,7 @@
                     return false;
                 }
                 
-                // ==== Start: Final duration validation for fixed packages ====
+                // ========== FIX: Duration validation for fixed packages ==========
                 if (selectedPackageFlexibility === false && selectedPackageDuration > 0) {
                     const startTime = $('#startTime').val();
                     const endTime = $('#endTime').val();
@@ -1501,6 +1566,7 @@
                         const endDate = new Date();
                         endDate.setHours(endHours, endMinutes, 0);
                         
+                        // If end time is less than start time, assume it's the next day
                         if (endDate < startDate) {
                             endDate.setDate(endDate.getDate() + 1);
                         }
@@ -1508,6 +1574,7 @@
                         const durationMs = endDate - startDate;
                         const durationHours = durationMs / (1000 * 60 * 60);
                         
+                        // Allow small floating point differences (e.g., 4.99 vs 5.00)
                         if (Math.abs(durationHours - selectedPackageDuration) >= 0.01) {
                             Swal.fire({
                                 icon: 'error',
@@ -1520,9 +1587,9 @@
                         }
                     }
                 }
-                // ==== End: Final duration validation for fixed packages ====
+                // ========== End of duration validation ==========
                 
-                // MODIFIED: Location type validation - check if it's set (should be auto-populated)
+                // Validate location type (should be auto-populated from package)
                 const locationType = $('#locationType').val();
                 if (!locationType) {
                     Swal.fire({
@@ -1534,17 +1601,22 @@
                     return false;
                 }
                 
-                const paymentType = $('input[name="payment_type"]:checked').val();
-                if (!paymentType) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Payment Type Required',
-                        text: 'Please select a payment type.',
-                        confirmButtonColor: '#3475db'
-                    });
-                    return false;
-                }
+                // ========== FIX: Only validate payment_type for studio ==========
+                @if($type === 'studio')
+                    const paymentType = $('input[name="payment_type"]:checked').val();
+                    if (!paymentType) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Payment Type Required',
+                            text: 'Please select a payment type.',
+                            confirmButtonColor: '#3475db'
+                        });
+                        return false;
+                    }
+                @endif
+                // ========== End of payment type validation ==========
                 
+                // Validate on-location details if applicable
                 if ($('#locationType').val() === 'on-location') {
                     if (!$('#city').val()) {
                         Swal.fire({
@@ -1565,6 +1637,17 @@
                         });
                         return false;
                     }
+                }
+                
+                // Validate terms agreement
+                if (!$('#termsCheck').is(':checked')) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Terms Required',
+                        text: 'You must agree to the Booking Terms and Conditions.',
+                        confirmButtonColor: '#3475db'
+                    });
+                    return false;
                 }
                 
                 return true;
@@ -1591,24 +1674,46 @@
             }
             
             function showBookingSummary() {
+                // Populate client information
                 $('#summaryFullName').text(bookingData.full_name);
                 $('#summaryContactNumber').text(bookingData.contact_number);
                 $('#summaryEmailAddress').text(bookingData.email);
                 
-                const packageName = $(`.package-radio[value="${selectedPackageId}"]`).data('package').package_name;
+                // Get package details
+                const packageRadio = $(`.package-radio[value="${selectedPackageId}"]`);
+                const packageData = packageRadio.data('package');
+                const packageName = packageData.package_name;
+                
+                // ========== FIX: Clear existing dynamic content to prevent duplicates ==========
+                $('#summaryPackage').siblings('.package-type-badge, .package-location-badge, .gallery-info, .photographer-info, .fixed-deposit-info').remove();
+                // ========== End of cleanup ==========
+                
+                // Package name
                 $('#summaryPackage').text(packageName);
                 
-                // ==== Start: Show package flexibility in summary ====
+                // ========== FIX: Show package flexibility in summary ==========
                 const flexibilityHtml = selectedPackageFlexibility 
-                    ? '<span class="badge badge-soft-success"><i class="ti ti-clock-edit me-1"></i> Flexible Time Package</span>'
-                    : '<span class="badge badge-soft-secondary"><i class="ti ti-clock me-1"></i> Fixed Duration: ' + selectedPackageDuration + ' hours</span>';
+                    ? '<span class="badge badge-soft-success package-type-badge"><i class="ti ti-clock-edit me-1"></i> Flexible Time Package</span>'
+                    : '<span class="badge badge-soft-secondary package-type-badge"><i class="ti ti-clock me-1"></i> Fixed Duration: ' + selectedPackageDuration + ' hours</span>';
                 
                 $('#summaryPackage').after(`
                     <p class="text-muted small mb-1">Package Type:</p>
-                    <p class="fw-medium mb-2">${flexibilityHtml}</p>
+                    <p class="fw-medium mb-2 package-type-badge">${flexibilityHtml}</p>
                 `);
-                // ==== End: Show package flexibility in summary ====
+                // ========== End of package flexibility display ==========
                 
+                // ========== FIX: Show package location badge ==========
+                const locationBadge = packageData.package_location === 'On-Location'
+                    ? '<span class="badge badge-soft-info package-location-badge"><i class="ti ti-map-pin me-1"></i> On-Location Package</span>'
+                    : '<span class="badge badge-soft-primary package-location-badge"><i class="ti ti-building me-1"></i> In-Studio Package</span>';
+                
+                $('#summaryPackage').after(`
+                    <p class="text-muted small mb-1">Package Location:</p>
+                    <p class="fw-medium mb-2 package-location-badge">${locationBadge}</p>
+                `);
+                // ========== End of package location display ==========
+                
+                // Event date
                 const eventDate = new Date(bookingData.event_date);
                 $('#summaryDate').text(eventDate.toLocaleDateString('en-US', { 
                     year: 'numeric', 
@@ -1616,11 +1721,12 @@
                     day: 'numeric' 
                 }));
                 
+                // Event time
                 $('#summaryTime').text(
                     formatTime(bookingData.start_time) + ' - ' + formatTime(bookingData.end_time)
                 );
                 
-                // Show duration info in summary
+                // ========== FIX: Show duration info in summary for fixed packages ==========
                 if (!selectedPackageFlexibility && selectedPackageDuration > 0) {
                     const startTime = bookingData.start_time;
                     const endTime = bookingData.end_time;
@@ -1647,11 +1753,13 @@
                         <p class="fw-medium mb-2">${durationHours.toFixed(1)} hours (matches package fixed duration)</p>
                     `);
                 }
+                // ========== End of duration info ==========
                 
-                // MODIFIED: Show location type based on package
+                // Location type
                 const locationTypeDisplay = bookingData.location_type === 'in-studio' ? 'In-Studio' : 'On-Location';
                 $('#summaryLocationType').text(locationTypeDisplay);
                 
+                // Location details for on-location bookings
                 if (bookingData.location_type === 'on-location') {
                     let locationText = '';
                     if (bookingData.venue_name) locationText += `<strong>${bookingData.venue_name}</strong><br>`;
@@ -1668,26 +1776,41 @@
                     $('#summaryLocationDetails').hide();
                 }
                 
-                // ADDED: Show package location badge in summary
-                const package = $(`.package-radio[value="${selectedPackageId}"]`).data('package');
-                const locationBadge = package.package_location === 'On-Location'
-                    ? '<span class="badge badge-soft-info"><i class="ti ti-map-pin me-1"></i> On-Location Package</span>'
-                    : '<span class="badge badge-soft-primary"><i class="ti ti-building me-1"></i> In-Studio Package</span>';
-                
-                $('#summaryPackage').after(`
-                    <p class="text-muted small mb-1">Package Location:</p>
-                    <p class="fw-medium mb-2" id="summaryPackageLocation">${locationBadge}</p>
-                `);
-                
+                // ========== FIX: Display price breakdown with proper formatting ==========
                 if (window.bookingSummary) {
                     $('#packagePrice').text('₱' + window.bookingSummary.package_price);
                     $('#downPayment').text('₱' + window.bookingSummary.down_payment);
                     $('#remainingBalance').text('₱' + window.bookingSummary.remaining_balance);
                     $('#totalAmount').text('₱' + window.bookingSummary.total_amount);
                     
-                    const downpaymentPercentage = window.bookingSummary.downpayment_percentage || 30;
-                    $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                    // Handle different deposit types for freelancer
+                    @if($type === 'freelancer')
+                        if (window.bookingSummary.deposit_type === 'fixed') {
+                            $('#downPaymentLabel').text('Fixed Deposit:');
+                            $('#downPayment').text('₱' + window.bookingSummary.down_payment);
+                            
+                            // Add fixed deposit info
+                            const depositInfo = `
+                                <div class="alert alert-info mt-2 py-2 small fixed-deposit-info">
+                                    <i class="ti ti-info-circle me-1"></i>
+                                    Fixed deposit of ₱${window.bookingSummary.deposit_amount}. 
+                                    ${parseFloat(window.bookingSummary.remaining_balance.replace(/,/g, '')) > 0 ? 
+                                        'Balance of ₱' + window.bookingSummary.remaining_balance + ' payable after event.' : 
+                                        'This is the full amount.'}
+                                </div>
+                            `;
+                            $('#downPaymentRow').after(depositInfo);
+                        } else {
+                            const downpaymentPercentage = window.bookingSummary.downpayment_percentage || 30;
+                            $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                            $('.fixed-deposit-info').remove();
+                        }
+                    @else
+                        const downpaymentPercentage = window.bookingSummary.downpayment_percentage || 30;
+                        $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                    @endif
                     
+                    // Show/hide rows based on payment type
                     if (window.bookingSummary.payment_type === 'full_payment') {
                         $('#downPaymentRow').hide();
                         $('#remainingBalanceRow').hide();
@@ -1696,32 +1819,36 @@
                         $('#remainingBalanceRow').show();
                     }
                     
+                    // ========== FIX: Display gallery info ==========
                     const galleryHtml = `
                         <p class="text-muted small mb-1 mt-2">Online Gallery:</p>
-                        <p class="fw-medium mb-2">
+                        <p class="fw-medium mb-2 gallery-info">
                             <span class="badge badge-soft-${window.bookingSummary.online_gallery ? 'success' : 'warning'}">
                                 <i class="${window.bookingSummary.online_gallery ? 'ti ti-photo' : 'ti ti-photo-off'} me-1"></i>
                                 ${window.bookingSummary.gallery_status || (window.bookingSummary.online_gallery ? 'Included' : 'Not Included')}
                             </span>
                         </p>
                     `;
-                    
                     $('#summaryPackage').after(galleryHtml);
                     
-                    const isStudio = $('#bookingType').val() === 'studio';
-                    if (isStudio && window.bookingSummary.photographer_count !== undefined) {
-                        const photographerHtml = `
-                            <p class="text-muted small mb-1">Assigned Photographers:</p>
-                            <p class="fw-medium mb-2">
-                                <span class="badge badge-soft-primary">
-                                    <i class="ti ti-users me-1"></i>
-                                    ${window.bookingSummary.photographer_text || (window.bookingSummary.photographer_count + ' photographer' + (window.bookingSummary.photographer_count > 1 ? 's' : ''))}
-                                </span>
-                            </p>
-                        `;
-                        $('#summaryPackage').after(photographerHtml);
-                    }
+                    // ========== FIX: Display photographer info for studio ==========
+                    @if($type === 'studio')
+                        if (window.bookingSummary.photographer_count !== undefined) {
+                            const photographerHtml = `
+                                <p class="text-muted small mb-1">Assigned Photographers:</p>
+                                <p class="fw-medium mb-2 photographer-info">
+                                    <span class="badge badge-soft-primary">
+                                        <i class="ti ti-users me-1"></i>
+                                        ${window.bookingSummary.photographer_text || (window.bookingSummary.photographer_count + ' photographer' + (window.bookingSummary.photographer_count > 1 ? 's' : ''))}
+                                    </span>
+                                </p>
+                            `;
+                            $('#summaryPackage').after(photographerHtml);
+                        }
+                    @endif
+                    // ========== End of photographer info ==========
                     
+                    // ========== FIX: Display package inclusions ==========
                     let inclusionsHtml = '';
                     if (window.bookingSummary.inclusions && Array.isArray(window.bookingSummary.inclusions)) {
                         window.bookingSummary.inclusions.forEach(function(inclusion) {
@@ -1729,6 +1856,7 @@
                         });
                     }
                     $('#summaryInclusions').html(inclusionsHtml);
+                    // ========== End of inclusions display ==========
                 }
                 
                 $('#bookingSummaryModal').modal('show');
@@ -1952,9 +2080,31 @@
                 $('#remainingBalance').text('₱' + summary.remaining_balance);
                 $('#totalAmount').text('₱' + summary.total_amount);
                 
-                // Update down payment label with dynamic percentage
-                const downpaymentPercentage = summary.downpayment_percentage || 30;
-                $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                // Update down payment label with dynamic percentage or fixed amount
+                @if($type === 'freelancer')
+                    if (summary.deposit_type === 'fixed') {
+                        $('#downPaymentLabel').text('Fixed Deposit:');
+                        $('.fixed-deposit-info').remove();
+                        
+                        const depositInfo = `
+                            <div class="alert alert-info mt-2 py-2 small fixed-deposit-info">
+                                <i class="ti ti-info-circle me-1"></i>
+                                Fixed deposit of ₱${summary.deposit_amount}. 
+                                ${parseFloat(summary.remaining_balance.replace(/,/g, '')) > 0 ? 
+                                    'Balance of ₱' + summary.remaining_balance + ' payable after event.' : 
+                                    'This is the full amount.'}
+                            </div>
+                        `;
+                        $('#downPaymentRow').after(depositInfo);
+                    } else {
+                        const downpaymentPercentage = summary.downpayment_percentage || 30;
+                        $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                        $('.fixed-deposit-info').remove();
+                    }
+                @else
+                    const downpaymentPercentage = summary.downpayment_percentage || 30;
+                    $('#downPaymentLabel').text(`Down Payment (${downpaymentPercentage}%):`);
+                @endif
                 
                 // Show/hide rows based on payment type
                 if (summary.payment_type === 'full_payment') {
@@ -1964,16 +2114,6 @@
                     $('#downPaymentRow').show();
                     $('#remainingBalanceRow').show();
                 }
-                
-                const paymentTypeText = summary.payment_type === 'downpayment' 
-                    ? `${downpaymentPercentage}% Downpayment`
-                    : 'Full Payment';
-                
-                $('#summaryPaymentType').remove();
-                $('#summaryPackage').after(`
-                    <p class="text-muted small mb-1">Payment Type:</p>
-                    <p class="fw-medium mb-2" id="summaryPaymentType">${paymentTypeText}</p>
-                `);
             }
         });
     </script>
